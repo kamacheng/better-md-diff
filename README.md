@@ -4,7 +4,7 @@
 
 在 Obsidian 中查看 Markdown 相对 **Git HEAD（最近一次提交）** 的差异，配对审阅新增与删除，并安全地按变更块还原。
 
-[下载最新版本](https://github.com/kamacheng/better-md-diff/releases/latest) · [反馈问题](https://github.com/kamacheng/better-md-diff/issues)
+[社区插件页面](https://community.obsidian.md/plugins/better-md-diff) · [下载最新版本](https://github.com/kamacheng/better-md-diff/releases/latest) · [反馈问题](https://github.com/kamacheng/better-md-diff/issues)
 
 ## 功能
 
@@ -28,7 +28,14 @@
 
 ## 安装
 
-目前通过 GitHub Release 分发，**尚未加入 Obsidian 社区插件目录**。
+### 社区插件安装（推荐）
+
+1. 在 Obsidian 中打开“设置 → 第三方插件 → 浏览”。
+2. 搜索 **Better MD Diff**，点击“安装”，然后启用。
+
+也可打开[官方社区页面](https://community.obsidian.md/plugins/better-md-diff)，点击 **Add to Obsidian**。后续更新可直接在 Obsidian 的第三方插件设置中检查并安装。
+
+### 手动安装（备用）
 
 1. 打开 [最新 Release](https://github.com/kamacheng/better-md-diff/releases/latest)，下载附件 `main.js`、`manifest.json`、`styles.css`。不要下载 GitHub 自动生成的 Source code 压缩包作为安装包。
 2. 在 vault 的配置目录下创建 `plugins/better-md-diff/`，将三个文件放入其中：
@@ -117,7 +124,9 @@ npm run dev       # 监听构建
 npm run check     # 测试、类型检查、构建及发布文件校验
 ```
 
-构建结果为根目录 `main.js` 和 `dist/better-md-diff/`。Obsidian、CodeMirror 由宿主提供，不打包第二份编辑器。测试说明见 [docs/TESTING.md](docs/TESTING.md)。
+构建结果为根目录 `main.js` 和 `dist/better-md-diff/`，均可重新生成。Obsidian、CodeMirror 由宿主提供，不打包第二份编辑器。
+
+自动化测试使用临时 Git 仓库，不操作真实笔记仓库。手动测试还原、保存及撤销时，请使用独立测试 vault，避免其他插件的自动格式化干扰。
 
 发布时同步更新 `package.json`、`package-lock.json`、`manifest.json`、`versions.json`。Release 标签必须与清单版本完全一致，例如 **`0.2.0`**，不加 `v` 前缀；上传 `main.js`、`manifest.json`、`styles.css` 三个附件。
 

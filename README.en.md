@@ -4,7 +4,7 @@
 
 Review Markdown changes against **Git HEAD (the latest commit)** in Obsidian, compare paired old/new lines, and safely restore individual change blocks.
 
-[Download the latest release](https://github.com/kamacheng/better-md-diff/releases/latest) · [Report an issue](https://github.com/kamacheng/better-md-diff/issues)
+[Community plugin page](https://community.obsidian.md/plugins/better-md-diff) · [Download the latest release](https://github.com/kamacheng/better-md-diff/releases/latest) · [Report an issue](https://github.com/kamacheng/better-md-diff/issues)
 
 ## Features
 
@@ -28,7 +28,14 @@ Host testing has been performed on **Windows / Obsidian 1.13.7**. Other platform
 
 ## Installation
 
-Distribution is currently through GitHub Releases. **The plugin is not yet listed in the Obsidian Community plugins directory.**
+### Community plugins (recommended)
+
+1. In Obsidian, open **Settings → Community plugins → Browse**.
+2. Search for **Better MD Diff**, select **Install**, then enable it.
+
+Alternatively, visit the [official community page](https://community.obsidian.md/plugins/better-md-diff) and select **Add to Obsidian**. Future updates can be checked and installed from Obsidian's Community plugins settings.
+
+### Manual installation (alternative)
 
 1. Open the [latest release](https://github.com/kamacheng/better-md-diff/releases/latest) and download the attached `main.js`, `manifest.json`, and `styles.css`. GitHub's automatically generated Source code archives are not installation packages.
 2. Create `plugins/better-md-diff/` inside your vault's configuration directory and place the three files there:
@@ -117,7 +124,9 @@ npm run dev       # Watch and build
 npm run check     # Tests, type checking, build, and release-file validation
 ```
 
-Build output is written to root `main.js` and `dist/better-md-diff/`. Obsidian and CodeMirror are provided by the host rather than bundled as a second editor instance. See [docs/TESTING.md](docs/TESTING.md) for testing notes.
+Build output is written to root `main.js` and `dist/better-md-diff/`; both can be regenerated. Obsidian and CodeMirror are provided by the host rather than bundled as a second editor instance.
+
+Automated tests use temporary Git repositories, not real note repositories. Use a separate test vault for manual restoration, saving, and undo checks to avoid interference from other plugins' automatic formatting.
 
 Before releasing, update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json` consistently. The release tag must exactly match the manifest version, such as **`0.2.0`**, without a `v` prefix. Attach `main.js`, `manifest.json`, and `styles.css` to the release.
 
