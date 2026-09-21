@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
-import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { realpath } from 'node:fs/promises';
+import { basename, dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { assertTextSize, MAX_BYTES } from './diff';
 
@@ -47,13 +48,16 @@ export async function readGitBaseline(vaultRoot: string, vaultPath: string, gitP
 
   try {
     let root: string;
+    let directory: string;
     try {
-      root = (await run(dirname(absolute), ['rev-parse', '--show-toplevel'])).replace(/[\r\n]+$/, '');
+      // Match Git's physical paths while leaving file symlinks for the index check below.
+      directory = await realpath(dirname(absolute));
+      root = (await run(directory, ['rev-parse', '--show-toplevel'])).replace(/[\r\n]+$/, '');
     } catch (error) {
       if (error instanceof GitReadError) throw error;
       throw new GitReadError('repository', '无法访问 Git 仓库。请确认文档位于仓库内，且仓库权限与 safe.directory 配置正确。');
     }
-    const path = relative(root, absolute).split(sep).join('/');
+    const path = relative(root, resolve(directory, basename(absolute))).split(sep).join('/');
     const index = await run(root, ['ls-files', '--stage', '-z', '--', path]);
     if (!index) throw new GitReadError('untracked', '此文档尚未纳入 Git 管理。请先执行 git add，再刷新差异。');
     const entries = index.split('\0').filter(Boolean);

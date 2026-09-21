@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -54,12 +54,32 @@ describe('read-only Git HEAD baseline', () => {
     expect((await readGitBaseline(join(root, 'vault'), 'note.md')).content).toBe('nested\n');
   });
 
+  it('reads a repository through a directory alias without escaping its root', async () => {
+    await note('note.md', 'HEAD\n'); await commit();
+    const aliases = await mkdtemp(join(tmpdir(), 'better-md-alias-'));
+    const alias = join(aliases, 'linked');
+    try {
+      await symlink(root, alias, 'junction');
+      expect((await readGitBaseline(alias, 'note.md')).content).toBe('HEAD\n');
+      expect(await readFile(join(root, 'note.md'), 'utf8')).toBe('HEAD\n');
+    } finally { await rm(aliases, { recursive: true, force: true }); }
+  });
+
   it('discovers a nested repository using the document directory', async () => {
     await mkdir(join(root, 'nested'));
     await exec('git', ['init', '-q'], { cwd: join(root, 'nested') });
     await note('nested/note.md', 'new\n');
     await exec('git', ['add', 'note.md'], { cwd: join(root, 'nested') });
     expect(await readGitBaseline(root, 'nested/note.md')).toEqual({ content: '', head: null, isNew: true });
+  });
+
+  it('rejects a path recorded as a file symlink without resolving its target', async () => {
+    await note('note.md', 'HEAD\n'); await commit();
+    const blob = (await git('rev-parse', 'HEAD:note.md')).trim();
+    await git('update-index', '--add', '--cacheinfo', `120000,${blob},linked.md`);
+    await expect(readGitBaseline(root, 'linked.md')).rejects.toMatchObject({
+      reason: 'read', message: '暂不支持符号链接或子模块文件。',
+    });
   });
 
   it('reports untracked and ignored documents', async () => {
