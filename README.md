@@ -126,9 +126,11 @@ npm run check     # 测试、类型检查、构建及发布文件校验
 
 构建结果为根目录 `main.js` 和 `dist/better-md-diff/`，均可重新生成。Obsidian、CodeMirror 由宿主提供，不打包第二份编辑器。
 
-自动化测试使用临时 Git 仓库，不操作真实笔记仓库。手动测试还原、保存及撤销时，请使用独立测试 vault，避免其他插件的自动格式化干扰。
+[GitHub Actions](https://github.com/kamacheng/better-md-diff/actions/workflows/ci.yml) 会在 Windows、macOS、Linux 上分别使用 Node.js 22 和 24 执行 `npm run check`。自动化测试使用临时 Git 仓库，不操作真实笔记仓库。手动测试还原、保存及撤销时，请使用独立测试 vault，避免其他插件的自动格式化干扰。
 
 发布时同步更新 `package.json`、`package-lock.json`、`manifest.json`、`versions.json`。Release 标签必须与清单版本完全一致，例如 **`0.2.0`**，不加 `v` 前缀；上传 `main.js`、`manifest.json`、`styles.css` 三个附件。
+
+建议将源码项目放在 vault 外，安装目录只保留 `main.js`、`manifest.json`、`styles.css` 及已有的 `data.json`。不要把 `src/`、`tests/` 或 `node_modules/` 复制到安装目录。
 
 仓库不包含依赖目录、用户配置、笔记、临时测试库或生成的构建产物。
 

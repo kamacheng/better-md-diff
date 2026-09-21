@@ -126,9 +126,11 @@ npm run check     # Tests, type checking, build, and release-file validation
 
 Build output is written to root `main.js` and `dist/better-md-diff/`; both can be regenerated. Obsidian and CodeMirror are provided by the host rather than bundled as a second editor instance.
 
-Automated tests use temporary Git repositories, not real note repositories. Use a separate test vault for manual restoration, saving, and undo checks to avoid interference from other plugins' automatic formatting.
+[GitHub Actions](https://github.com/kamacheng/better-md-diff/actions/workflows/ci.yml) runs `npm run check` on Windows, macOS, and Linux with both Node.js 22 and 24. Automated tests use temporary Git repositories, not real note repositories. Use a separate test vault for manual restoration, saving, and undo checks to avoid interference from other plugins' automatic formatting.
 
 Before releasing, update `package.json`, `package-lock.json`, `manifest.json`, and `versions.json` consistently. The release tag must exactly match the manifest version, such as **`0.2.0`**, without a `v` prefix. Attach `main.js`, `manifest.json`, and `styles.css` to the release.
+
+Keep the source project outside your vault. The installed plugin directory should contain only `main.js`, `manifest.json`, `styles.css`, and any existing `data.json`. Do not copy `src/`, `tests/`, or `node_modules/` into that directory.
 
 Dependencies, user configuration, notes, temporary test vaults, and generated bundles are excluded from the source repository.
 
