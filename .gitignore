@@ -1,0 +1,14 @@
+node_modules/
+main.js
+main.js.map
+data.json
+dist/
+coverage/
+.test-vault/
+host-smoke-*/
+.obsidian/
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db

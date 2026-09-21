@@ -1,0 +1,40 @@
+{
+  "name": "better-md-diff",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Markdown Git HEAD diffs with paired review and per-hunk restoration for Obsidian.",
+  "license": "MIT",
+  "author": "kamacheng",
+  "homepage": "https://github.com/kamacheng/better-md-diff",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kamacheng/better-md-diff.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kamacheng/better-md-diff/issues"
+  },
+  "engines": {
+    "node": "^22.12.0 || >=24.0.0"
+  },
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "npm run test && npm run build && npm run check:release",
+    "check:release": "node scripts/check-release.mjs"
+  },
+  "dependencies": {
+    "diff": "^9.0.0"
+  },
+  "devDependencies": {
+    "@codemirror/state": "6.5.0",
+    "@codemirror/view": "6.38.6",
+    "@types/node": "^22.0.0",
+    "esbuild": "^0.25.0",
+    "jsdom": "^26.0.0",
+    "obsidian": "1.13.1",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.11"
+  }
+}
