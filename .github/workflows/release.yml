@@ -1,0 +1,54 @@
+name: Attested release
+
+on:
+  push:
+    tags: ['*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - name: 检出发布标签
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: 设置 Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: 安装锁定依赖
+        run: npm ci
+      - name: 检查源码、构建和标签版本
+        run: npm run check
+      - name: 签署发布产物来源证明
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: |
+            dist/better-md-diff/main.js
+            dist/better-md-diff/manifest.json
+            dist/better-md-diff/styles.css
+      - name: 创建待人工确认的 Release 草稿
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dist/better-md-diff/main.js
+          dist/better-md-diff/manifest.json
+          dist/better-md-diff/styles.css
+          --verify-tag --draft --title "$RELEASE_TAG" --generate-notes

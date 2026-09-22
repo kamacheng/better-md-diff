@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { changeAnchor, computeDiff, MAX_BYTES, MAX_LINES } from '../src/diff';
+import { assertTextSize, changeAnchor, computeDiff } from '../src/diff';
+import { DEFAULT_SETTINGS } from '../src/options';
+const MAX_BYTES = DEFAULT_SETTINGS.maxFileMiB * 1024 * 1024;
+const MAX_LINES = DEFAULT_SETTINGS.maxLines;
 
 describe('Markdown line diff', () => {
   it('leaves identical and empty documents unchanged', () => {
@@ -14,7 +17,7 @@ describe('Markdown line diff', () => {
 
   it('groups adjacent additions and removals as modifications', () => {
     const diff = computeDiff('标题\n旧内容\n尾部\n', '标题\n新内容\n第二行\n尾部\n');
-    expect(diff.changes).toEqual([{ kind: 'modified', from: 1, to: 3, added: 2, deleted: 1 }]);
+    expect(diff.changes).toMatchObject([{ kind: 'modified', from: 1, to: 3, added: 2, deleted: 1 }]);
     expect(diff.added).toBe(2);
     expect(diff.deleted).toBe(1);
     expect(diff.hunks[0]?.line).toBe(1);
@@ -28,7 +31,7 @@ describe('Markdown line diff', () => {
 
   it('anchors pure deletions at the following line', () => {
     const diff = computeDiff('a\nremove\nb\n', 'a\nb\n');
-    expect(diff.changes).toEqual([{ kind: 'deleted', from: 1, to: 1, added: 0, deleted: 1 }]);
+    expect(diff.changes).toMatchObject([{ kind: 'deleted', from: 1, to: 1, added: 0, deleted: 1 }]);
     expect(changeAnchor(diff.changes[0]!, diff.lineCount)).toBe(1);
   });
 
@@ -65,6 +68,18 @@ describe('Markdown line diff', () => {
     expect(diff.hunks[0]?.rows.map((row) => row.kind)).toEqual(['deleted']);
     expect(diff.hunks[0]?.line).toBe(2);
     expect(computeDiff('a\nb\n', 'a\n', 0).hunks[0]?.line).toBe(1);
+  });
+
+  it('uses configurable byte and line limits for both versions, including UTF-8 bytes', () => {
+    const limits = { maxFileMiB: 3, maxLines: 30_000 };
+    const text = '中文'.repeat(400_000);
+    expect(() => assertTextSize(text)).toThrow('过大');
+    expect(() => assertTextSize(text, limits)).not.toThrow();
+    expect(() => assertTextSize('中'.repeat(1024 * 1024 + 1), limits)).toThrow('3 MiB');
+    const lines = 'same\n'.repeat(25_000);
+    expect(computeDiff(lines, `new\n${lines}`, 0, limits).added).toBe(1);
+    expect(() => computeDiff(lines, '', 0)).toThrow('20000');
+    expect(() => assertTextSize('a\0b', limits)).toThrow('二进制');
   });
 
   it('rejects oversized and binary inputs', () => {

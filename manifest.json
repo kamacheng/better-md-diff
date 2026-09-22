@@ -3,7 +3,7 @@
   "name": "Better MD Diff",
   "version": "0.2.0",
   "minAppVersion": "1.8.0",
-  "description": "Compare Markdown with Git HEAD using paired diffs, synchronized navigation, and confirmed per-hunk restoration.",
+  "description": "Compare Markdown with Git HEAD using paired diffs, synchronized navigation, and confirmed per-change restoration.",
   "author": "kamac",
   "authorUrl": "https://github.com/kamacheng",
   "isDesktopOnly": true

@@ -1,5 +1,6 @@
 import { diffArrays } from 'diff';
-import type { DiffRow } from './diff';
+import type { DiffHunk, DiffRow } from './diff';
+import { t } from './i18n';
 
 export interface InlineSegment {
   text: string;
@@ -16,14 +17,26 @@ const MAX_INLINE_LENGTH = 20_000;
 const INLINE_BUDGET_MS = 80;
 const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
 
+/** Hunk boundaries survive zero-context views; all hunks share one refinement budget. */
+export function highlightHunks(hunks: readonly DiffHunk[]): InlineHighlights {
+  const result: InlineHighlights = { segments: new Map(), pairs: new Map(), limited: false };
+  const deadline = Date.now() + INLINE_BUDGET_MS;
+  for (const hunk of hunks) {
+    const highlights = highlightRows(hunk.rows, deadline);
+    for (const [row, segments] of highlights.segments) result.segments.set(row, segments);
+    for (const [row, pair] of highlights.pairs) result.pairs.set(row, pair);
+    result.limited ||= highlights.limited;
+  }
+  return result;
+}
+
 /** Refine replacements only; the original line diff and statistics stay unchanged. */
-export function highlightRows(rows: readonly DiffRow[]): InlineHighlights {
+export function highlightRows(rows: readonly DiffRow[], deadline = Date.now() + INLINE_BUDGET_MS): InlineHighlights {
   const result: InlineHighlights = {
     segments: new Map(rows.map((row) => [row, [{ text: row.text, changed: row.kind !== 'context' }]])),
     pairs: new Map(),
     limited: false,
   };
-  const deadline = Date.now() + INLINE_BUDGET_MS;
   for (let start = 0; start < rows.length;) {
     if (rows[start]!.kind === 'context') { start++; continue; }
     let end = start;
@@ -132,27 +145,34 @@ export function renderHighlightedText(container: HTMLElement, row: DiffRow, segm
       container.append(document.createTextNode(segment.text));
       continue;
     }
-    const mark = document.createElement('mark');
+    const mark = container.createEl('mark');
     mark.className = `bmd-inline-change bmd-inline-${row.kind}`;
-    const action = row.kind === 'added' ? '新增' : '删除';
-    mark.title = `${action}内容`;
-    for (const piece of segment.text.match(/[ \t]|[^ \t]+/g) ?? []) {
-      if (piece === ' ' || piece === '\t') {
-        const whitespace = document.createElement('span');
+    for (const piece of segment.text.match(/ +|\t|[^ \t]+/g) ?? []) {
+      if (piece.startsWith(' ') || piece === '\t') {
+        const whitespace = mark.createSpan();
         whitespace.className = 'bmd-inline-whitespace';
         whitespace.textContent = piece;
-        whitespace.dataset.symbol = piece === ' ' ? '·' : '→';
-        whitespace.title = `${action}${piece === ' ' ? '空格' : '制表符'}`;
-        mark.append(whitespace);
+        whitespace.dataset.symbol = piece === '\t' ? '→' : '·'.repeat(piece.length);
       } else mark.append(document.createTextNode(piece));
     }
-    container.append(mark);
   }
   if (!row.text) {
     container.append(document.createTextNode(' '));
     if (row.kind !== 'context') {
       container.classList.add('bmd-empty-line');
-      container.title = row.kind === 'added' ? '新增空行' : '删除空行';
     }
   }
+  localizeHighlightedText(container, row);
+}
+
+/** Update only UI metadata; source text nodes and copy selections are never replaced. */
+export function localizeHighlightedText(container: HTMLElement, row: DiffRow): void {
+  const added = row.kind === 'added';
+  container.querySelectorAll<HTMLElement>('mark').forEach((mark) => { mark.title = t(added ? '新增内容' : '删除内容'); });
+  container.querySelectorAll<HTMLElement>('.bmd-inline-whitespace').forEach((whitespace) => {
+    whitespace.title = t(whitespace.textContent === '\t' ? (added ? '新增制表符' : '删除制表符') : (added ? '新增空格' : '删除空格'));
+  });
+  if (!row.text && row.kind !== 'context') { container.title = t(added ? '新增空行' : '删除空行'); container.dataset.emptyLabel = t('空行'); }
+  const newline = container.querySelector('.bmd-no-newline');
+  if (newline) newline.textContent = t(' ⏎ 无末尾换行');
 }

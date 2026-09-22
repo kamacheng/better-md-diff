@@ -1,7 +1,7 @@
 import { diffLines } from 'diff';
+import { LocalizedError, t } from './i18n';
 
-export const MAX_BYTES = 2 * 1024 * 1024;
-export const MAX_LINES = 20_000;
+import { DEFAULT_SETTINGS, type DocumentLimits } from './options';
 export type ChangeKind = 'added' | 'deleted' | 'modified';
 
 export interface DiffRow {
@@ -19,6 +19,8 @@ export interface LineChange {
   to: number;
   added: number;
   deleted: number;
+  /** One contiguous edit, independent of the context used to display hunks. */
+  rows: DiffRow[];
 }
 
 export interface DiffHunk {
@@ -39,20 +41,23 @@ export function normalizeText(text: string): string {
   return text.replace(/\r\n/g, '\n');
 }
 
-export function assertTextSize(text: string): void {
-  if (Buffer.byteLength(text, 'utf8') > MAX_BYTES || text.split('\n').length > MAX_LINES) {
-    throw new Error('文档过大：首版支持不超过 2 MiB、20,000 行的 Markdown。');
+export function assertTextSize(text: string, limits: DocumentLimits = DEFAULT_SETTINGS): void {
+  let lines = 1;
+  // Count without allocating an array containing every line of a large document.
+  for (let i = 0; i < text.length && lines <= limits.maxLines; i++) if (text.charCodeAt(i) === 10) lines++;
+  if (Buffer.byteLength(text, 'utf8') > limits.maxFileMiB * 1024 * 1024 || lines > limits.maxLines) {
+    throw new LocalizedError('文档过大：当前上限为 {size} MiB、{lines} 行，可在插件设置中调整。', { size: limits.maxFileMiB, lines: limits.maxLines });
   }
-  if (text.includes('\0')) throw new Error('该文件包含二进制内容，无法作为 Markdown 比较。');
+  if (text.includes('\0')) throw new LocalizedError('该文件包含二进制内容，无法作为 Markdown 比较。');
 }
 
-export function computeDiff(before: string, after: string, contextLines = 3): DocumentDiff {
-  assertTextSize(before);
-  assertTextSize(after);
+export function computeDiff(before: string, after: string, contextLines = 3, limits: DocumentLimits = DEFAULT_SETTINGS): DocumentDiff {
+  assertTextSize(before, limits);
+  assertTextSize(after, limits);
   before = normalizeText(before);
   after = normalizeText(after);
   const parts = diffLines(before, after, { timeout: 200 });
-  if (!parts) throw new Error('差异计算超时，请缩小文档或变更范围后重试。');
+  if (!parts) throw new LocalizedError('差异计算超时，请缩小文档或变更范围后重试。');
 
   const rows: DiffRow[] = [];
   const changes: LineChange[] = [];
@@ -70,17 +75,19 @@ export function computeDiff(before: string, after: string, contextLines = 3): Do
 
   for (const part of parts) {
     if (!part.added && !part.removed) flush();
-    else pending ??= { kind: 'added', from: newLine - 1, to: newLine - 1, added: 0, deleted: 0 };
+    else pending ??= { kind: 'added', from: newLine - 1, to: newLine - 1, added: 0, deleted: 0, rows: [] };
     const lines = part.value.match(/[^\n]*\n|[^\n]+$/g) ?? [];
     for (const line of lines) {
       const kind = part.added ? 'added' : part.removed ? 'deleted' : 'context';
-      rows.push({
+      const row: DiffRow = {
         kind,
         text: line.endsWith('\n') ? line.slice(0, -1) : line,
         oldLine: part.added ? null : oldLine++,
         newLine: part.removed ? null : newLine++,
         noNewline: !line.endsWith('\n'),
-      });
+      };
+      rows.push(row);
+      if (kind !== 'context') pending!.rows.push(row);
       if (part.added) { added++; pending!.added++; pending!.to++; }
       if (part.removed) { deleted++; pending!.deleted++; }
     }
@@ -116,8 +123,19 @@ export function changeAnchor(change: LineChange, lineCount: number): number {
   return Math.min(change.from, Math.max(0, lineCount - 1));
 }
 
+/** Human-readable operation scope, not the first line of a context group. */
+export function changeRange(change: LineChange): string {
+  if (change.kind === 'deleted') {
+    const from = change.rows[0]!.oldLine!;
+    const to = change.rows[change.rows.length - 1]!.oldLine!;
+    return from === to ? t('恢复 HEAD 第 {from} 行', { from }) : t('恢复 HEAD 第 {from}–{to} 行', { from, to });
+  }
+  const from = change.from + 1, to = change.to;
+  return from === to ? t('当前第 {from} 行', { from }) : t('当前第 {from}–{to} 行', { from, to });
+}
+
 export function changeLabel(changes: LineChange[]): string {
   const added = changes.reduce((sum, change) => sum + change.added, 0);
   const deleted = changes.reduce((sum, change) => sum + change.deleted, 0);
-  return `相对 HEAD：新增 ${added} 行，删除 ${deleted} 行。查看差异`;
+  return t('相对 HEAD：新增 {added} 行，删除 {deleted} 行。查看差异', { added, deleted });
 }

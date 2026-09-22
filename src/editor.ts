@@ -2,24 +2,25 @@ import { StateEffect, type Extension, type Range } from '@codemirror/state';
 import { BlockType, Decoration, type DecorationSet, EditorView, gutter, GutterMarker, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { changeAnchor, changeLabel, normalizeText, type ChangeKind, type LineChange } from './diff';
 import type { DiffStore } from './store';
+import { t } from './i18n';
 
 export interface EditorDiffHost {
   store: DiffStore;
   getPath(view: EditorView): string | undefined;
   enabled(): boolean;
-  open(path: string, line: number): void;
+  open(path: string, line: number, preferDeletion: boolean): void;
   select(path: string, line: number): void;
 }
 
 export const refreshDiff = StateEffect.define<null>();
 
 class DiffMarker extends GutterMarker {
-  constructor(private kind: ChangeKind, private label: string, private open: () => void) { super(); }
+  constructor(private kind: ChangeKind, private label: string, private deleted: number, private open: () => void) { super(); }
   toDOM(view: EditorView): HTMLElement {
-    const button = view.dom.ownerDocument.createElement('button');
+    const button = view.dom.ownerDocument.adoptNode(createEl('button'));
     button.className = `bmd-gutter-marker bmd-gutter-marker--${this.kind}`;
     button.type = 'button';
-    button.textContent = this.kind === 'added' ? '+' : this.kind === 'deleted' ? '−' : '~';
+    button.textContent = this.kind === 'added' ? '+' : this.kind === 'deleted' ? `−${this.deleted}` : '~';
     button.title = this.label;
     button.setAttribute('aria-label', this.label);
     button.addEventListener('mousedown', (event) => event.preventDefault());
@@ -32,6 +33,7 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
   const plugin = ViewPlugin.fromClass(class {
     decorations: DecorationSet = Decoration.none;
     markers = new Map<number, GutterMarker>();
+    private positions: number[] = [];
     private path?: string;
     private unsubscribe: () => void;
     private destroyed = false;
@@ -70,6 +72,7 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
     private build(): void {
       this.path = host.getPath(this.view);
       this.markers.clear();
+      this.positions = [];
       this.decorations = Decoration.none;
       if (!this.path || !host.enabled()) return;
       const state = host.store.get(this.path);
@@ -88,20 +91,28 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
       for (const [number, changes] of [...lines].sort(([a], [b]) => a - b)) {
         const from = this.view.state.doc.line(number + 1).from;
         const kind = changes.length > 1 ? 'modified' : changes[0]!.kind;
-        const label = changeLabel(changes);
-        decorations.push(Decoration.line({ attributes: { class: `bmd-line bmd-line--${kind}`, title: label } }).range(from));
+        const deleted = changes.reduce((sum, change) => sum + change.deleted, 0);
+        const label = kind === 'deleted' ? t('已删除 {count} 行，查看对应改动', { count: deleted }) : changeLabel(changes);
+        // The rule marks a deletion boundary, not deleted current text. Never tint its anchor line.
+        const className = kind === 'deleted' ? 'bmd-deletion-anchor' : `bmd-line bmd-line--${kind}`;
+        decorations.push(Decoration.line({ attributes: { class: className, title: label } }).range(from));
         const path = this.path;
-        this.markers.set(from, new DiffMarker(kind, label, () => host.open(path, number)));
+        this.positions.push(from);
+        this.markers.set(from, new DiffMarker(kind, label, deleted, () => host.open(path, number, kind === 'deleted')));
       }
       this.decorations = Decoration.set(decorations);
     }
 
     markerForRange(from: number, to: number): GutterMarker | null {
       // Live Preview replaces tables/callouts with block widgets spanning multiple source lines.
-      for (const [position, marker] of this.markers) {
-        if (position >= from && position <= to) return marker;
+      let low = 0, high = this.positions.length;
+      while (low < high) {
+        const middle = (low + high) >>> 1;
+        if (this.positions[middle]! < from) low = middle + 1;
+        else high = middle;
       }
-      return null;
+      const position = this.positions[low];
+      return position !== undefined && position <= to ? this.markers.get(position) ?? null : null;
     }
 
     destroy(): void { this.destroyed = true; this.unsubscribe(); }
@@ -110,7 +121,7 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
   return [plugin, gutter({
     class: 'bmd-gutter',
     lineMarker: (view, line) => {
-      const blocks = Array.isArray(line.type) ? line.type : [line];
+      const blocks = typeof line.type === 'number' ? [line] : line.type;
       for (const block of blocks) {
         if (block.type !== BlockType.Text) continue;
         const marker = view.plugin(plugin)?.markerForRange(block.from, block.to);

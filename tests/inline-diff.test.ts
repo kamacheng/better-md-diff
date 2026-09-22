@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { computeDiff, type DiffRow } from '../src/diff';
-import { highlightRows, pairDiffRows, renderHighlightedText } from '../src/inline-diff';
+import { highlightHunks, highlightRows, pairDiffRows, renderHighlightedText } from '../src/inline-diff';
+import { installObsidianDom } from './helpers/obsidian-dom';
+
+installObsidianDom(document);
 
 function compare(before: string, after: string) {
   const rows = computeDiff(before, after).hunks.flatMap((hunk) => hunk.rows);
@@ -12,6 +15,16 @@ function compare(before: string, after: string) {
 }
 
 describe('intraline highlights in the diff panel', () => {
+  it('never pairs independent hunks when zero context hides their separator', () => {
+    const diff = computeDiff('alpha old\nkeep 1\nkeep 2\nbeta old\n', 'keep 1\nkeep 2\nalpha new\nbeta old\n', 0);
+    expect(diff.hunks).toHaveLength(2);
+    const result = highlightHunks(diff.hunks);
+    expect(result.pairs.size).toBe(0);
+    for (const hunk of diff.hunks) {
+      for (const row of hunk.rows) expect(result.segments.get(row)).toEqual([{ text: row.text, changed: true }]);
+    }
+  });
+
   it('highlights only a removed Chinese phrase, not the rest of the line', () => {
     const { changed } = compare('仅为验证对照组，不是备选方案。\n', '仅为验证对照组。\n');
     expect(changed('deleted')).toEqual(['，不是备选方案']);
@@ -104,6 +117,15 @@ describe('intraline highlights in the diff panel', () => {
     expect(code.textContent).toBe(row.text);
     expect(code.querySelector('.bmd-inline-added')?.textContent).toBe(' \t ');
     expect(Array.from(code.querySelectorAll('.bmd-inline-whitespace')).map((el) => el.getAttribute('data-symbol'))).toEqual(['·', '→', '·']);
+  });
+
+  it('renders a long run of spaces with one marker node and preserves all source spaces', () => {
+    const { rows, result } = compare('', ' '.repeat(50_000));
+    const code = document.createElement('code');
+    renderHighlightedText(code, rows[0]!, result.segments.get(rows[0]!)!);
+    expect(code.textContent).toBe(' '.repeat(50_000));
+    expect(code.querySelectorAll('.bmd-inline-whitespace')).toHaveLength(1);
+    expect(code.querySelector('.bmd-inline-whitespace')?.getAttribute('data-symbol')).toBe('·'.repeat(50_000));
   });
 
   it('uses text nodes instead of executing note HTML', () => {

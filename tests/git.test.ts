@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readGitBaseline } from '../src/git';
+import { GitBaselineReader, readGitBaseline } from '../src/git';
 
 const exec = promisify(execFile);
 let root: string;
@@ -25,6 +25,62 @@ beforeEach(async () => {
 afterEach(async () => { await rm(root, { recursive: true, force: true }); });
 
 describe('read-only Git HEAD baseline', () => {
+  it('batches repository metadata and caches immutable blobs without caching tracking state', async () => {
+    for (let i = 0; i < 10; i++) await note(`note-${i}.md`, `HEAD ${i}\n`);
+    await commit();
+    const trace = join(root, 'trace.jsonl');
+    const previousTrace = process.env.GIT_TRACE2_EVENT;
+    process.env.GIT_TRACE2_EVENT = trace;
+    const reader = new GitBaselineReader(root);
+    const paths = Array.from({ length: 10 }, (_, i) => `note-${i}.md`);
+    try {
+      let read = reader.batch(paths);
+      for (const path of paths) expect((await read(path)).isNew).toBe(false);
+      const count = async () => (await readFile(trace, 'utf8')).split('\n').filter((line) => line.includes('"event":"start"')).length;
+      const cold = await count();
+      read = reader.batch(paths);
+      for (const path of paths) await read(path);
+      expect(cold).toBe(14); // root, HEAD, index, tree, ten distinct blobs.
+      expect(await count() - cold).toBe(4);
+      await git('rm', '--cached', 'note-0.md');
+      await expect(reader.read('note-0.md')).rejects.toMatchObject({ reason: 'untracked' });
+      await note('note-1.md', 'updated\n'); await commit();
+      expect((await reader.read('note-1.md')).content).toBe('updated\n');
+    } finally {
+      reader.dispose();
+      if (previousTrace === undefined) delete process.env.GIT_TRACE2_EVENT;
+      else process.env.GIT_TRACE2_EVENT = previousTrace;
+    }
+  });
+
+  it('isolates errors within a batch and rejects reads after disposal', async () => {
+    await note('valid.md', 'HEAD\n'); await commit();
+    await note('untracked.md', 'new\n');
+    const reader = new GitBaselineReader(root);
+    const read = reader.batch(['valid.md', 'untracked.md', '../escape.md']);
+    expect((await read('valid.md')).content).toBe('HEAD\n');
+    await expect(read('untracked.md')).rejects.toMatchObject({ reason: 'untracked' });
+    await expect(read('../escape.md')).rejects.toMatchObject({ reason: 'read' });
+    reader.dispose();
+    await expect(reader.read('valid.md')).rejects.toThrow();
+  });
+
+  it('honors configured limits in cached and independent restoration reads', async () => {
+    const text = '中文'.repeat(450_000);
+    await note('large.md', text); await commit();
+    await expect(readGitBaseline(root, 'large.md')).rejects.toThrow('上限');
+    const limits = { maxFileMiB: 3, maxLines: 30_000 };
+    const reader = new GitBaselineReader(root, 'git', limits);
+    try {
+      expect((await reader.read('large.md')).content).toBe(text);
+      expect((await reader.read('large.md')).content).toBe(text);
+      expect((await readGitBaseline(root, 'large.md', 'git', undefined, limits)).content).toBe(text);
+    } finally { reader.dispose(); }
+    await note('lines.md', 'line\n'.repeat(25_000)); await commit();
+    await expect(readGitBaseline(root, 'lines.md')).rejects.toThrow('20000');
+    expect((await readGitBaseline(root, 'lines.md', 'git', undefined, limits)).content).toBe('line\n'.repeat(25_000));
+  });
+
   it('reads HEAD, not index or working tree, without writing either', async () => {
     await note('note.md', 'HEAD\n'); await commit();
     await note('note.md', 'staged\n'); await git('add', 'note.md');

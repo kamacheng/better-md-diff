@@ -13,6 +13,11 @@ describe('settings defaults and validation', () => {
     const options = { ...DEFAULT_SETTINGS, fontSize: 18, contextLines: 0, inlineHighlights: false, showWhitespace: false, followEditor: false, followNavigation: false, editDelayMs: 500, gitPollSeconds: 30 };
     expect(normalizeSettings(options)).toEqual(options);
   });
+  it('persists configurable document limits and rejects invalid values', () => {
+    expect(normalizeSettings({ maxFileMiB: 10, maxLines: 100_000 })).toMatchObject({ maxFileMiB: 10, maxLines: 100_000 });
+    expect(normalizeSettings({ maxFileMiB: Infinity, maxLines: 'unlimited' })).toEqual(DEFAULT_SETTINGS);
+    expect(normalizeSettings({ maxFileMiB: 999, maxLines: -1 })).toMatchObject({ maxFileMiB: 20, maxLines: 1000 });
+  });
   it('bounds numeric settings and rejects invalid persisted values', () => {
     expect(normalizeSettings({ fontSize: 99, contextLines: -1, editDelayMs: 1, gitPollSeconds: 999 })).toMatchObject({ fontSize: 22, contextLines: 0, editDelayMs: 100, gitPollSeconds: 60 });
     expect(normalizeSettings({ fontSize: NaN, contextLines: Infinity, editDelayMs: '0', showMarkers: 'false', gitPath: '' })).toEqual(DEFAULT_SETTINGS);

@@ -1,139 +1,27 @@
 # Better MD Diff
 
-**简体中文** · [English](README.en.md)
+[简体中文](README.zh-CN.md)
 
-在 Obsidian 中查看 Markdown 相对 **Git HEAD（最近一次提交）** 的差异，配对审阅新增与删除，并安全地按变更块还原。
+Compare Markdown with **Git HEAD (the latest commit)** in Obsidian, highlight changed text, and restore individual changes after confirmation.
 
-[社区插件页面](https://community.obsidian.md/plugins/better-md-diff) · [下载最新版本](https://github.com/kamacheng/better-md-diff/releases/latest) · [反馈问题](https://github.com/kamacheng/better-md-diff/issues)
+![Obsidian demo: edit, inspect a deletion, restore one change, and undo](docs/images/obsidian-demo.gif)
 
-## 功能
+Recorded in Obsidian using a public-domain excerpt from *Pride and Prejudice* with demonstration edits.
 
-- **编辑时查看差异**：源码编辑和实时预览中，以行背景及侧边 `+` / `−` / `~` 标记新增、删除与修改，包含尚未保存的编辑内容。
-- **旧新行配对**：右侧面板将对应的红色旧行、绿色新行上下紧邻显示，并突出具体变化字词；纯新增、纯删除独立展示。
-- **双向定位**：左侧选行时，面板联合定位对应旧新行；右侧“上一处 / 下一处”也可定位原文。两个方向可以分别关闭。
-- **直接选择复制**：复制得到原始 Markdown，不夹带行号、增删符号或空白提示。右侧面板保持只读。
-- **按块还原**：每张变更卡片提供“还原此处”，确认后恢复该块至 HEAD，保留其他修改与编辑器撤销记录。
-- **可调整的展示与刷新**：字号、上下文行数、字词高亮、空白符、联动方向及刷新频率均可设置。
-- **干净的阅读模式**：阅读正文不注入差异标记；右侧面板仍可用于审阅。
+## Installation
 
-变化的空格显示为 `·`，Tab 显示为 `→`。这些符号只用于展示，不会写入文档或复制内容。插件不在原文中插入已删除的文字。
+Requires desktop **Obsidian 1.8.0+** and a local **Git** installation.
 
-## 要求
+Open **Settings → Community plugins → Browse**, search for **Better MD Diff**, install it, and enable it.
 
-- 桌面版 Obsidian **1.8.0+**；不支持移动端。
-- 本机已安装 Git，目标 Markdown 已纳入 Git 管理。
-- 当前插件界面为简体中文，文档提供中英两版。
+## Usage
 
-已在 **Windows / Obsidian 1.13.7** 实测；其他平台及旧版本尚未完成实机验证。无需安装 Obsidian Git 插件。
+1. Edit a Git-tracked Markdown note in Source mode or Live Preview.
+2. Click a gutter marker or the Git diff ribbon icon to review changes: **red is old text, green is added text**.
+3. Click a restore arrow and confirm the preview. Press **Ctrl/Cmd+Z** in the source editor to undo.
 
-## 安装
+A contiguous multi-line replacement is one change. The plugin never stages, commits, or pushes. Back up important notes first.
 
-### 社区插件安装（推荐）
+## License
 
-1. 在 Obsidian 中打开“设置 → 第三方插件 → 浏览”。
-2. 搜索 **Better MD Diff**，点击“安装”，然后启用。
-
-也可打开[官方社区页面](https://community.obsidian.md/plugins/better-md-diff)，点击 **Add to Obsidian**。后续更新可直接在 Obsidian 的第三方插件设置中检查并安装。
-
-### 手动安装（备用）
-
-1. 打开 [最新 Release](https://github.com/kamacheng/better-md-diff/releases/latest)，下载附件 `main.js`、`manifest.json`、`styles.css`。不要下载 GitHub 自动生成的 Source code 压缩包作为安装包。
-2. 在 vault 的配置目录下创建 `plugins/better-md-diff/`，将三个文件放入其中：
-
-   ```text
-   <vault>/.obsidian/plugins/better-md-diff/
-   ├── main.js
-   ├── manifest.json
-   └── styles.css
-   ```
-
-3. 重启 Obsidian，在“设置 → 第三方插件”中启用 **Better MD Diff**。
-
-若使用自定义配置目录，用它替换 `.obsidian`。更新时仅覆盖上述三个文件，保留原有 `data.json`，然后重新加载插件或重启 Obsidian。
-
-## 使用
-
-1. 打开一个已被 Git 跟踪的 `.md` 文档，在源码编辑或实时预览中修改内容。
-2. 点击编辑器侧边差异标记、功能区的 Git 差异图标或底部 Git 状态；也可运行命令 **Better MD Diff: 查看当前文档与 HEAD 的差异**，或右键文件选择“查看 Git 差异”。
-3. 在面板中审阅增删。两列行号依次对应 HEAD 和当前内容；淡蓝标题标识当前区块，蓝色边条及行号标识对应行。
-4. 用“上一处 / 下一处”浏览变更，或点击区块标题返回原文。
-
-光标移动不会自动打开面板，也不会抢编辑焦点。多行选择跟随光标所在端；未展示的未修改行会定位到最近变更。旧新行能放进视口时一起显示，过长时优先显示当前行。
-
-### 复制与还原
-
-- **取用局部旧文字**：选择红色旧行里的文字并复制。跨行选择按显示顺序复制；同时选中旧行与新行时，会复制两者。
-- **恢复一处完整改动**：点击该卡片的“还原此处”，核对确认框中的增删行数，再确认。相邻变更可能被合并到同一卡片，受上下文行数设置影响。
-- **撤销还原**：在左侧编辑器按 **Ctrl/Cmd+Z**。后续输入或其他插件的自动整理可能产生新的撤销记录。
-
-还原只在已显示的源码编辑 / 实时预览文档中执行，不自动打开文件或切换阅读模式。确认期间若文档、模式或 HEAD 改变，会拒绝过期操作；取消弹窗或卸载插件会中止尚未执行的还原。
-
-**还原修改的是编辑器内容，不是暂存区。** 不会执行 Git 暂存、提交、重置或推送，也不会删除文件；新文件相对空基准还原后可能成为空文档。保存仍由 Obsidian 管理。重要内容请先提交或备份。
-
-## 设置
-
-在“设置 → Better MD Diff”中调整：
-
-| 分组 | 项目 | 默认值 / 范围 |
-| --- | --- | --- |
-| 显示与排版 | 编辑正文差异标记 | 开启 |
-| 显示与排版 | 面板字号 | 13 px / 10–22 px |
-| 显示与排版 | 上下文行数 | 3 / 0–10 行 |
-| 显示与排版 | 变化字词高亮、变化空白可视化 | 均开启 |
-| 定位联动 | 左侧选行定位右侧、右侧前后按钮定位原文 | 均开启，独立控制 |
-| 刷新节奏 | 编辑后刷新延迟 | 350 ms / 100–2000 ms |
-| 刷新节奏 | Git 变化检测间隔 | 5 秒 / 2–60 秒 |
-| Git | 可执行文件路径 | `git` |
-
-比较基准固定为 **HEAD**，暂不支持选择历史提交；还原确认和过期检查不可关闭。切回应用或点击“刷新”也会更新 Git 基准。
-
-Windows 无法找到 Git 时，可填写如 `C:\Program Files\Git\cmd\git.exe`，不要加引号或命令参数。命令快捷键通过 Obsidian 的“快捷键”设置自行绑定。
-
-## 比较规则与限制
-
-- 比较 **HEAD → 当前编辑内容**，包含已暂存和未暂存修改，而不是仅比较暂存区与工作区。
-- 未跟踪文件会提示先执行 `git add`；插件不会自动添加文件。
-- 文件已被跟踪、但 HEAD 中不存在时，以空文档为基准；尚无首次提交的仓库同理。
-- 忽略 CRLF/LF 差异，保留其他空白及末尾换行变化。纯删除定位到后续行，文末删除定位到末尾。
-- 重命名后的路径不追溯旧文件名。不提供已删除文件列表、移动检测或嵌入笔记的独立差异扫描。
-- 隐藏属性、折叠内容或空文档不一定有可见的正文标记，面板仍可显示原始变化。
-- 单个版本最多 **2 MiB / 20,000 行**；行差异计算超时为 200 ms，Git 单次读取超时为 8 秒。
-- 大段替换或字词细化超出计算预算时，会回退到整行高亮，不丢弃增删内容。
-- Git 不可用、权限问题、未解决冲突、不支持的对象等会显示提示。符号链接及二进制文档不受支持。
-
-### 为什么保存后出现额外空格差异？
-
-格式化插件可能在保存或切换文件时实际改写文本。例如 Linter 的 **Two Spaces Between Lines with Content** 会添加 Markdown 强制换行所需的两个行尾空格。
-
-这些是真实差异，面板会显示为 `··`。请按需调整格式化插件；Better MD Diff 不修改其他插件设置，也不会默认忽略有 Markdown 语义的空白。
-
-## 隐私与文件访问
-
-- 不包含遥测、广告、账户要求或联网服务，不自动安装或更新自身及依赖。
-- 调用本机 Git 读取 HEAD、跟踪状态及仓库信息，不执行网络同步命令。
-- vault 位于更大的 Git 仓库中，或使用 Git worktree 时，Git 可能读取 **vault 目录以外的仓库元数据和对象**，以定位并读取正确基准。
-- 正文通过 Obsidian API 读取；只有确认按块还原后，才通过编辑器 API 修改目标文档。插件不会上传笔记。
-
-## 开发与发布
-
-使用 Node.js **22.12+（22.x）或 24+**：
-
-```bash
-npm ci
-npm run dev       # 监听构建
-npm run check     # 测试、类型检查、构建及发布文件校验
-```
-
-构建结果为根目录 `main.js` 和 `dist/better-md-diff/`，均可重新生成。Obsidian、CodeMirror 由宿主提供，不打包第二份编辑器。
-
-[GitHub Actions](https://github.com/kamacheng/better-md-diff/actions/workflows/ci.yml) 会在 Windows、macOS、Linux 上分别使用 Node.js 22 和 24 执行 `npm run check`。自动化测试使用临时 Git 仓库，不操作真实笔记仓库。手动测试还原、保存及撤销时，请使用独立测试 vault，避免其他插件的自动格式化干扰。
-
-发布时同步更新 `package.json`、`package-lock.json`、`manifest.json`、`versions.json`。Release 标签必须与清单版本完全一致，例如 **`0.2.0`**，不加 `v` 前缀；上传 `main.js`、`manifest.json`、`styles.css` 三个附件。
-
-建议将源码项目放在 vault 外，安装目录只保留 `main.js`、`manifest.json`、`styles.css` 及已有的 `data.json`。不要把 `src/`、`tests/` 或 `node_modules/` 复制到安装目录。
-
-仓库不包含依赖目录、用户配置、笔记、临时测试库或生成的构建产物。
-
-## 许可证
-
-[MIT](LICENSE)。打包依赖 [jsdiff / diff](https://github.com/kpdecker/jsdiff) 使用 BSD-3-Clause；其完整许可及本项目 MIT 声明均保留在构建后的 `main.js` 中。
+[MIT](LICENSE). The jsdiff dependency uses BSD-3-Clause; its full license is included in the build.

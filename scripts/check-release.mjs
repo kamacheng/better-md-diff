@@ -19,6 +19,8 @@ assert(manifest.isDesktopOnly === true, 'Local Git requires desktop-only mode');
 assert(manifest.description.length <= 250 && manifest.description.endsWith('.'), 'Use a short description ending in a period');
 assert.equal(pkg.version, manifest.version, 'Package and manifest versions differ');
 assert.equal(lock.version, manifest.version, 'Lockfile version differs');
+assert.equal(lock.packages[''].version, manifest.version, 'Lockfile root package version differs');
+if (process.env.RELEASE_TAG !== undefined) assert.equal(process.env.RELEASE_TAG, manifest.version, 'Release tag must exactly match manifest.version (no v prefix)');
 assert.equal(versions[manifest.version], manifest.minAppVersion, 'Missing compatibility entry');
 assert.equal(pkg.license, 'MIT');
 
@@ -31,6 +33,8 @@ const bundle = await readFile('main.js', 'utf8');
 for (const license of ['LICENSE', 'node_modules/diff/LICENSE']) {
   assert(bundle.includes((await readFile(license, 'utf8')).trim()), `Missing bundled license: ${license}`);
 }
-assert((await readFile('README.md', 'utf8')).includes('(README.en.md)'), 'Missing English README link');
-assert((await readFile('README.en.md', 'utf8')).includes('(README.md)'), 'Missing Chinese README link');
+const readme = await readFile('README.md', 'utf8');
+assert(readme.includes('(README.zh-CN.md)'), 'Missing Chinese README link');
+assert(readme.includes('## Installation') && readme.includes('## Usage'), 'Keep English quick-start sections discoverable by community scans');
+assert((await readFile('README.zh-CN.md', 'utf8')).includes('(README.md)'), 'Missing English README link');
 console.log(`Release ${manifest.version} validated. Use tag ${manifest.version} (without a v prefix).`);

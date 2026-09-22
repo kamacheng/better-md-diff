@@ -4,6 +4,9 @@ import { Decoration, EditorView, WidgetType } from '@codemirror/view';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { editorDiffExtension } from '../src/editor';
 import { DiffStore } from '../src/store';
+import { installObsidianDom } from './helpers/obsidian-dom';
+
+installObsidianDom(document);
 
 let view: EditorView | undefined;
 let store: DiffStore;
@@ -28,7 +31,7 @@ describe('CodeMirror source and live-preview extension', () => {
     const button = document.querySelector<HTMLButtonElement>('.bmd-gutter-marker');
     expect(button?.getAttribute('aria-label')).toContain('新增 1 行');
     button?.click();
-    expect(open).toHaveBeenCalledWith('note.md', 0);
+    expect(open).toHaveBeenCalledWith('note.md', 0, false);
     expect(view?.state.doc.toString()).toBe('new\n');
   });
 
@@ -41,10 +44,24 @@ describe('CodeMirror source and live-preview extension', () => {
     expect(document.querySelector('.bmd-line--modified')).not.toBeNull();
   });
 
-  it('marks pure deletions even when the entire document is empty', async () => {
-    await setup('old\n', '');
-    expect(document.querySelector('.bmd-line--deleted')).not.toBeNull();
-    expect(document.querySelector('.bmd-gutter-marker--deleted')).not.toBeNull();
+  it.each(['', 'keep\n'])('marks a deletion boundary with its count, without inserting content: %j', async (after) => {
+    const { open } = await setup(`${after}old 1\nold 2\n`, after);
+    expect(document.querySelector('.bmd-line--deleted')).toBeNull();
+    expect(document.querySelectorAll('.bmd-deletion-anchor')).toHaveLength(1);
+    const marker = document.querySelector<HTMLButtonElement>('.bmd-gutter-marker--deleted')!;
+    expect(marker.textContent).toBe('−2');
+    expect(marker.getAttribute('aria-label')).toContain('已删除 2 行');
+    marker.click();
+    expect(open).toHaveBeenCalledWith('note.md', after ? 1 : 0, true);
+    expect(view?.state.doc.toString()).toBe(after);
+  });
+
+  it('marks the boundary before unchanged text rather than treating that text as deleted', async () => {
+    await setup('before\nremoved\nfollowing\n', 'before\nfollowing\n');
+    const anchor = document.querySelector('.bmd-deletion-anchor')!;
+    expect(anchor.textContent).toBe('following');
+    expect(anchor.classList.contains('bmd-line--deleted')).toBe(false);
+    expect(view?.state.doc.toString()).toBe('before\nfollowing\n');
   });
 
   it('keeps a gutter marker for replaced Live Preview blocks', async () => {

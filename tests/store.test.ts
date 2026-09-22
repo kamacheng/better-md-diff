@@ -21,6 +21,33 @@ describe('diff snapshot store', () => {
     expect(read).toHaveBeenCalledTimes(2);
   });
 
+  it('applies changed limits to cached versions and recovers after raising them', async () => {
+    const text = 'line\n'.repeat(25_000);
+    const read = vi.fn(async () => ({ ...baseline, content: text }));
+    const high = { maxFileMiB: 3, maxLines: 30_000 };
+    const store = new DiffStore(read, 0, high);
+    await store.refresh('large.md', `new\n${text}`);
+    expect(store.get('large.md')?.status).toBe('ready');
+    store.updatePresentation(0, { maxFileMiB: 2, maxLines: 20_000 });
+    expect(store.get('large.md')?.status).toBe('error');
+    store.updatePresentation(0, high);
+    await store.refresh('large.md', `new\n${text}`);
+    expect(store.get('large.md')?.status).toBe('ready');
+    expect(read).toHaveBeenCalledTimes(1);
+    store.dispose();
+  });
+
+  it('checks pending reads against the newest limits', async () => {
+    const pending = deferred<GitBaseline>();
+    const store = new DiffStore(() => pending.promise, 0, { maxFileMiB: 3, maxLines: 30_000 });
+    const request = store.refresh('large.md', 'line\n'.repeat(25_000));
+    store.updatePresentation(0, { maxFileMiB: 2, maxLines: 20_000 });
+    pending.resolve({ ...baseline, content: '' });
+    await request;
+    expect(store.get('large.md')?.status).toBe('error');
+    store.dispose();
+  });
+
   it('updates presentation and context without new Git reads', async () => {
     const read = vi.fn(async () => ({ ...baseline, content: 'a\nold\nb\n' }));
     const store = new DiffStore(read);

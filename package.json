@@ -2,7 +2,7 @@
   "name": "better-md-diff",
   "version": "0.2.0",
   "private": true,
-  "description": "Markdown Git HEAD diffs with paired review and per-hunk restoration for Obsidian.",
+  "description": "Markdown Git HEAD diffs with paired review and per-change restoration for Obsidian.",
   "license": "MIT",
   "author": "kamacheng",
   "homepage": "https://github.com/kamacheng/better-md-diff",
@@ -21,20 +21,29 @@
     "build": "npm run typecheck && node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run test && npm run build && npm run check:release",
+    "lint": "eslint src --max-warnings 0",
+    "check": "npm run lint && npm run test && npm run build && npm run check:release",
     "check:release": "node scripts/check-release.mjs"
   },
   "dependencies": {
     "diff": "^9.0.0"
+  },
+  "overrides": {
+    "eslint-plugin-obsidianmd": {
+      "obsidian": "$obsidian"
+    }
   },
   "devDependencies": {
     "@codemirror/state": "6.5.0",
     "@codemirror/view": "6.38.6",
     "@types/node": "^22.0.0",
     "esbuild": "^0.25.0",
+    "eslint": "^9.39.5",
+    "eslint-plugin-obsidianmd": "^0.4.2",
     "jsdom": "^26.0.0",
     "obsidian": "1.13.1",
     "typescript": "^5.8.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^4.1.11"
   }
 }
