@@ -1,6 +1,6 @@
 {
   "name": "better-md-diff",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Markdown Git HEAD diffs with paired review and per-change restoration for Obsidian.",
   "license": "MIT",
