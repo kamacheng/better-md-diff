@@ -1,13 +1,14 @@
 import { editorInfoField, FileSystemAdapter, getLanguage as getObsidianLanguage, MarkdownView, Notice, Plugin, requireApiVersion, setTooltip, TFile, type Command } from 'obsidian';
 import { editorDiffExtension } from './editor';
 import { GitBaselineReader, readGitBaseline, type BaselineRead } from './git';
-import { DIFF_VIEW, DiffPanel } from './panel';
+import { DIFF_ICON, DIFF_VIEW, DiffPanel } from './panel';
 import { DiffSettingTab } from './settings';
 import { DEFAULT_SETTINGS, normalizeSettings, type DiffSettings } from './options';
 import { DiffStore, type ReadyDiffState } from './store';
 import { normalizeText, type LineChange } from './diff';
 import { executeChangeRevert } from './revert';
 import { RevertChangeModal } from './revert-modal';
+import { revealSourceLine } from './source-navigation';
 import { languageForObsidian, LocalizedError, onLanguageChange, setLanguage, t, type MessageKey } from './i18n';
 
 export default class BetterMdDiff extends Plugin {
@@ -48,7 +49,7 @@ export default class BetterMdDiff extends Plugin {
       settings: () => this.settings,
       currentPath: () => this.selectedPath,
       refresh: (path) => this.refresh(path, true),
-      navigate: (path, line, focus) => { void this.navigate(path, line, focus); },
+      navigate: (path, line, focus, center) => { void this.navigate(path, line, focus, center); },
       revert: (snapshot, change) => this.confirmRevert(snapshot, change),
     }));
     this.registerEditorExtension(editorDiffExtension({
@@ -60,7 +61,7 @@ export default class BetterMdDiff extends Plugin {
     }));
     const settingsTab = new DiffSettingTab(this.app, this);
     this.addSettingTab(settingsTab);
-    const ribbon = this.addRibbonIcon('git-compare-arrows', t('查看当前文档的 Git 差异'), () => { void this.openDiff(); });
+    const ribbon = this.addRibbonIcon(DIFF_ICON, t('查看当前文档的 Git 差异'), () => { void this.openDiff(); });
     this.register(onLanguageChange(() => {
       this.revertModal?.close(); // Changing the prompt language must never keep a pending write alive.
       setTooltip(ribbon, t('查看当前文档的 Git 差异'));
@@ -94,7 +95,7 @@ export default class BetterMdDiff extends Plugin {
     } });
     this.registerEvent(this.app.workspace.on('file-menu', (menu, file) => {
       if (file instanceof TFile && file.extension.toLowerCase() === 'md') {
-        menu.addItem((item) => item.setTitle(t('查看 Git 差异')).setIcon('git-compare-arrows').onClick(() => { void this.openDiff(file.path); }));
+        menu.addItem((item) => item.setTitle(t('查看 Git 差异')).setIcon(DIFF_ICON).onClick(() => { void this.openDiff(file.path); }));
       }
     }));
     this.status = this.addStatusBarItem();
@@ -264,7 +265,7 @@ export default class BetterMdDiff extends Plugin {
     if (!this.stopped && panel instanceof DiffPanel) panel.move(direction);
   }
 
-  private async navigate(path: string, line: number, focus = true): Promise<void> {
+  private async navigate(path: string, line: number, focus = true, center = false): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(path);
     if (!(file instanceof TFile)) { new Notice(t('文档已移动或删除。')); return; }
     const matches = this.app.workspace.getLeavesOfType('markdown').filter((candidate) => candidate.view instanceof MarkdownView && candidate.view.file?.path === path);
@@ -273,13 +274,13 @@ export default class BetterMdDiff extends Plugin {
       ?? matches.find((candidate) => candidate.view.containerEl.isShown())
       ?? matches[0] ?? this.app.workspace.getLeaf('tab');
     if (!focus && leaf.view instanceof MarkdownView && leaf.view.file?.path === path && leaf.view.containerEl.isShown()) {
-      const target = Math.min(line, leaf.view.getViewData().split('\n').length - 1);
-      leaf.setEphemeralState({ line: target }); // Scroll the visible source/preview without stealing button focus.
+      revealSourceLine(leaf, leaf.view, line, center);
       return;
     }
     await leaf.openFile(file, { active: true, eState: { line } });
     leaf.setEphemeralState({ line });
     await this.app.workspace.revealLeaf(leaf);
+    if (center && !this.stopped && leaf.view instanceof MarkdownView && leaf.view.file?.path === path) revealSourceLine(leaf, leaf.view, line, true);
   }
 
   private confirmRevert(snapshot: ReadyDiffState, change: LineChange): void {

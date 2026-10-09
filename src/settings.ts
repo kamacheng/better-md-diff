@@ -40,7 +40,7 @@ export class DiffSettingTab extends PluginSettingTab {
       ] },
       { type: 'group', heading: t('定位联动'), items: [
         toggle('followEditor', '左侧选行定位右侧', '只联动已打开的面板，不抢编辑焦点，也不会自动打开面板。'),
-        toggle('followNavigation', '右侧前后按钮定位原文', '点击上一处/下一处时，同步定位原文；已显示的文档保持原模式和按钮焦点。'),
+        toggle('followNavigation', '右侧导航定位原文', '点击上一处/下一处、区块标题或改动行号时，同步定位原文；已显示的文档保持原模式和按钮焦点。'),
       ] },
       { type: 'group', heading: t('刷新节奏'), items: [
         slider('editDelayMs', '编辑后刷新延迟', '最后一次编辑后等待多久更新差异；数值越小，刷新越及时。', 'ms'),

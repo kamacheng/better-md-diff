@@ -1,7 +1,7 @@
 import { normalizeText, type LineChange } from './diff';
 import type { GitBaseline } from './git';
 import type { ReadyDiffState } from './store';
-import { LocalizedError } from './i18n';
+import { LocalizedError, type MessageKey } from './i18n';
 
 export interface RevertEdit { from: number; to: number; text: string }
 const staleMessage = '文档或 HEAD 已变化，请刷新差异后重新选择要还原的区块。';
@@ -15,8 +15,13 @@ export function prepareChangeRevert(snapshot: ReadyDiffState, change: LineChange
     || normalizeText(baseline.content) !== normalizeText(snapshot.baseline.content)) {
     throw new LocalizedError(staleMessage);
   }
+  return prepareTextRevert(change, current, baseline.content, staleMessage);
+}
+
+/** Callers validate snapshot ownership and freshness before preparing the single edit. */
+export function prepareTextRevert(change: LineChange, current: string, baselineContent: string, staleMessage: MessageKey): RevertEdit[] {
   const currentLines = current.match(/[^\n]*\n|[^\n]+$/g) ?? [];
-  const oldLines = baseline.content.match(/[^\n]*\n|[^\n]+$/g) ?? [];
+  const oldLines = baselineContent.match(/[^\n]*\n|[^\n]+$/g) ?? [];
   const offsets = [0];
   for (const line of currentLines) offsets.push(offsets.at(-1)! + line.length);
   const from = offsets[change.from], to = offsets[change.to];
@@ -25,7 +30,7 @@ export function prepareChangeRevert(snapshot: ReadyDiffState, change: LineChange
   const expected = added.map((row) => row.text + (row.noNewline ? '' : '\n')).join('');
   if (from === undefined || to === undefined || normalizeText(current.slice(from, to)) !== expected) throw new LocalizedError(staleMessage);
   const nearby = currentLines[change.from] ?? currentLines[change.from - 1] ?? '';
-  const eol = nearby.match(/\r?\n$/)?.[0] ?? current.match(/\r?\n/)?.[0] ?? baseline.content.match(/\r?\n/)?.[0] ?? '\n';
+  const eol = nearby.match(/\r?\n$/)?.[0] ?? current.match(/\r?\n/)?.[0] ?? baselineContent.match(/\r?\n/)?.[0] ?? '\n';
   const text = removed.map((row) => {
     const original = oldLines[row.oldLine! - 1];
     if (original === undefined) throw new LocalizedError(staleMessage);

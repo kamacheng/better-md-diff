@@ -4,16 +4,18 @@ import type { DiffStore, ReadyDiffState } from './store';
 import type { DiffSettings } from './options';
 import { highlightHunks, localizeHighlightedText, pairDiffRows, renderHighlightedText, type InlineHighlights } from './inline-diff';
 import { onLanguageChange, t, type MessageKey } from './i18n';
-import { findDiffLocation, revealDiffRow } from './diff-navigation';
+import { centerDiffChange, findDiffLocation, revealDiffRow } from './diff-navigation';
 import { selectedDiffText } from './diff-copy';
+import { ReadingGuideModal } from './reading-guide';
 
 export const DIFF_VIEW = 'better-md-diff-view';
+export const DIFF_ICON = 'file-diff';
 export interface DiffPanelHost {
   store: DiffStore;
   settings(): DiffSettings;
   currentPath(): string | undefined;
   refresh(path: string): Promise<void>;
-  navigate(path: string, line: number, focus?: boolean): void;
+  navigate(path: string, line: number, focus?: boolean, center?: boolean): void;
   revert(snapshot: ReadyDiffState, change: LineChange): void;
 }
 interface ChangeItem {
@@ -28,6 +30,7 @@ interface ChangeItem {
 interface HunkCard {
   key: string;
   element: HTMLElement;
+  heading: HTMLButtonElement;
   rows: HTMLElement[];
   pairs: Map<number, number>;
   limited: boolean;
@@ -54,6 +57,9 @@ export class DiffPanel extends ItemView {
   private previous!: HTMLButtonElement;
   private next!: HTMLButtonElement;
   private refreshButton!: HTMLButtonElement;
+  private navigationEl!: HTMLElement;
+  private helpButton!: HTMLButtonElement;
+  private helpModal?: ReadingGuideModal;
   private refreshRequest?: symbol;
   private summaryKey?: string;
   private feedbackKey?: MessageKey;
@@ -61,18 +67,33 @@ export class DiffPanel extends ItemView {
   constructor(leaf: WorkspaceLeaf, private host: DiffPanelHost) { super(leaf); }
   getViewType(): string { return DIFF_VIEW; }
   getDisplayText(): string { return t('Git 差异'); }
-  getIcon(): string { return 'git-compare-arrows'; }
+  getIcon(): string { return DIFF_ICON; }
 
   async onOpen(): Promise<void> {
     this.contentEl.addClass('bmd-panel');
     const toolbar = this.contentEl.createDiv({ cls: 'bmd-toolbar' });
     this.refreshButton = toolbar.createEl('button', { cls: 'bmd-refresh', text: t('刷新'), attr: { type: 'button', 'aria-label': t('重新读取 HEAD 并刷新差异') } });
     this.refreshButton.addEventListener('click', () => { void this.refreshCurrent(); });
-    this.previous = toolbar.createEl('button', { cls: 'bmd-previous', text: t('上一处'), attr: { type: 'button' } });
-    this.next = toolbar.createEl('button', { cls: 'bmd-next', text: t('下一处'), attr: { type: 'button' } });
+    this.navigationEl = toolbar.createDiv({ cls: 'bmd-navigation', attr: { role: 'group' } });
+    this.previous = this.navigationEl.createEl('button', { cls: 'bmd-previous bmd-icon-button', attr: { type: 'button' } });
+    setIcon(this.previous.createSpan({ attr: { 'aria-hidden': 'true' } }), 'arrow-up');
+    this.progress = this.navigationEl.createSpan({ cls: 'bmd-progress', attr: { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' } });
+    this.next = this.navigationEl.createEl('button', { cls: 'bmd-next bmd-icon-button', attr: { type: 'button' } });
+    setIcon(this.next.createSpan({ attr: { 'aria-hidden': 'true' } }), 'arrow-down');
     this.previous.addEventListener('click', () => this.move(-1));
     this.next.addEventListener('click', () => this.move(1));
-    this.progress = toolbar.createSpan({ cls: 'bmd-progress', attr: { 'aria-live': 'polite' } });
+    this.helpButton = toolbar.createEl('button', { cls: 'bmd-help-button bmd-icon-button', attr: { type: 'button', 'aria-haspopup': 'dialog' } });
+    setIcon(this.helpButton.createSpan({ attr: { 'aria-hidden': 'true' } }), 'help-circle');
+    this.helpButton.addEventListener('click', () => {
+      if (this.helpModal) return;
+      this.helpModal = new ReadingGuideModal(this.app, () => this.host.settings(), () => {
+        this.helpModal = undefined;
+        if (this.helpButton.isConnected) this.helpButton.focus({ preventScroll: true });
+      });
+      this.helpModal.open();
+    });
+    this.register(() => this.helpModal?.close());
+    this.localizeToolbar();
     this.feedback = this.contentEl.createDiv({ cls: 'bmd-feedback', attr: { role: 'status' } });
     this.summary = this.contentEl.createDiv({ cls: 'bmd-summary', attr: { 'aria-live': 'polite', role: 'status' } });
     this.body = this.contentEl.createDiv({ cls: 'bmd-diff-body' });
@@ -91,13 +112,12 @@ export class DiffPanel extends ItemView {
     this.register(this.host.store.subscribe((path) => { if (path === this.path) this.render(); }));
     this.register(onLanguageChange(() => {
       this.summaryKey = undefined;
-      this.previous.setText(t('上一处')); this.next.setText(t('下一处'));
-      this.refreshButton.setAttribute('aria-label', t('重新读取 HEAD 并刷新差异'));
+      this.localizeToolbar();
       this.updateRefreshButton();
       if (this.feedbackKey) this.feedback.setText(t(this.feedbackKey));
       this.items.forEach((item, index) => this.localizeItem(item, index));
-      this.cards.forEach((card) => {
-        card.element.querySelector('.bmd-context-gap')?.setAttribute('aria-label', t('已省略未修改内容'));
+      this.cards.forEach((card, index) => {
+        this.localizeCard(card, index);
         card.hunk.rows.forEach((row, i) => localizeHighlightedText(card.rows[i]!.querySelector<HTMLElement>('.bmd-row-text')!, row));
       });
       if (this.rendered && !this.cards.length) this.renderEmptyState();
@@ -135,6 +155,14 @@ export class DiffPanel extends ItemView {
   }
 
   private setFeedback(key: MessageKey): void { this.feedbackKey = key; this.feedback.setText(t(key)); }
+
+  private localizeToolbar(): void {
+    this.navigationEl.setAttribute('aria-label', t('变更导航'));
+    for (const [button, key] of [[this.previous, '上一处'], [this.next, '下一处'], [this.helpButton, '阅读说明'], [this.refreshButton, '重新读取 HEAD 并刷新差异']] as const) {
+      button.setAttribute('aria-label', t(key));
+      button.title = t(key);
+    }
+  }
 
   private updateRefreshButton(): void {
     this.refreshButton.disabled = !this.path || !!this.refreshRequest;
@@ -183,18 +211,34 @@ export class DiffPanel extends ItemView {
   }
 
   move(direction: -1 | 1): boolean {
-    if (!this.path || !this.rendered || !this.items.length || this.pendingRender) return false;
-    const index = (this.selected + direction + this.items.length) % this.items.length;
-    this.showChange(index);
-    if (this.host.settings().followNavigation) this.host.navigate(this.path, changeAnchor(this.items[index]!.change, this.rendered.diff.lineCount), false);
+    if (!this.items.length) return false;
+    return this.activateChange(this.items[(this.selected + direction + this.items.length) % this.items.length]);
+  }
+
+  private activateChange(item: ChangeItem | undefined): boolean {
+    if (!item || !this.path || !this.rendered || this.pendingRender) return false;
+    const index = this.items.indexOf(item);
+    if (index < 0) return false;
+    this.showChange(index, false);
+    centerDiffChange(this.body, item.element);
+    if (this.host.settings().followNavigation) this.host.navigate(this.path, changeAnchor(item.change, this.rendered.diff.lineCount), false, true);
     return true;
   }
 
   private updateProgress(): void {
-    this.progress.setText(this.items.length ? t('第 {index} / {total} 处', { index: this.selected + 1, total: this.items.length }) : t('0 处变更'));
-    this.progress.hidden = this.items.length === 0;
+    const label = this.items.length ? t('第 {index} / {total} 处', { index: this.selected + 1, total: this.items.length }) : t('0 处变更');
+    this.progress.setText(`${this.items.length ? this.selected + 1 : 0} / ${this.items.length}`);
+    this.progress.setAttribute('aria-label', label);
+    this.progress.title = label;
     this.previous.disabled = this.next.disabled = this.items.length < 2 || this.pendingRender;
     this.items.forEach((item, i) => item.element.toggleClass('bmd-change--selected', i === this.selected));
+    this.cards.forEach((card) => {
+      const selected = card.items.includes(this.items[this.selected]!);
+      card.element.toggleClass('bmd-diff-region--selected', selected);
+      card.heading.disabled = this.pendingRender;
+      if (selected) card.heading.setAttribute('aria-current', 'location');
+      else card.heading.removeAttribute('aria-current');
+    });
   }
 
   private clearCurrentRow(): void {
@@ -233,9 +277,9 @@ export class DiffPanel extends ItemView {
     if (state !== this.rendered) this.reconcile(state);
     const summaryKey = JSON.stringify([this.path, state.baseline.head, state.baseline.isNew, state.diff.added, state.diff.deleted, settings.inlineHighlights, settings.showWhitespace, this.cards.some((card) => card.limited)]);
     if (summaryKey !== this.summaryKey) {
-      const helpOpen = this.summary.querySelector<HTMLDetailsElement>('.bmd-help')?.open ?? false;
       this.summaryKey = summaryKey; this.summary.empty();
-      this.renderFileInfo(state.path);
+      const heading = this.summary.createDiv({ cls: 'bmd-summary-heading' });
+      this.renderFileInfo(state.path, heading);
       const base = this.summary.createDiv({ cls: 'bmd-base' });
       const reference = base.createSpan({ cls: 'bmd-baseline-ref' });
       reference.createSpan({ text: 'HEAD' });
@@ -244,27 +288,19 @@ export class DiffPanel extends ItemView {
       base.createSpan({ text: t('当前内容') });
       if (state.baseline.isNew) base.createSpan({ cls: 'bmd-new-file', text: t('新纳入文件') });
       if (state.diff.added || state.diff.deleted) {
-        const stats = this.summary.createDiv({ cls: 'bmd-stats' });
-        if (state.diff.added) stats.createSpan({ cls: 'bmd-stat-added', text: t('+{count} 新增', { count: state.diff.added }) });
-        if (state.diff.deleted) stats.createSpan({ cls: 'bmd-stat-deleted', text: t('−{count} 删除', { count: state.diff.deleted }) });
-      }
-      if (this.cards.length) {
-        const help = this.summary.createEl('details', { cls: 'bmd-help' });
-        help.open = helpOpen;
-        help.createEl('summary', { text: t('阅读说明') });
-        help.createDiv({ cls: 'bmd-hint', text: t('连续增删是一项改动；每项独立还原，上下文只用于阅读。') });
-        help.createDiv({ cls: 'bmd-hint', text: t('旧行与新行配对展示；两列行号依次为 HEAD、当前内容。') + (settings.inlineHighlights ? t('深色突出变化字词；') : '') + (settings.showWhitespace ? t('· 为空格，→ 为 Tab；') : '') + t('正文可选中复制。') });
-        help.createDiv({ cls: 'bmd-hint', text: t('点击改动行号定位原文，行尾箭头仅还原该项。') });
+        const stats = heading.createDiv({ cls: 'bmd-stats', attr: { role: 'group', 'aria-label': t('新增 {added} 行，删除 {deleted} 行', { added: state.diff.added, deleted: state.diff.deleted }) } });
+        if (state.diff.added) stats.createSpan({ cls: 'bmd-stat-added', text: `+${state.diff.added}`, attr: { title: t('+{count} 新增', { count: state.diff.added }) } });
+        if (state.diff.deleted) stats.createSpan({ cls: 'bmd-stat-deleted', text: `−${state.diff.deleted}`, attr: { title: t('−{count} 删除', { count: state.diff.deleted }) } });
       }
       if (this.cards.some((card) => card.limited)) this.summary.createDiv({ cls: 'bmd-hint', text: t('部分变更较大，已回退为整行高亮；完整增删内容仍保留。') });
     }
     this.updateProgress();
   }
 
-  private renderFileInfo(path: string): void {
+  private renderFileInfo(path: string, parent = this.summary): void {
     const parts = path.split('/');
     const name = parts.pop()!;
-    const file = this.summary.createDiv({ cls: 'bmd-file-info', attr: { title: path } });
+    const file = parent.createDiv({ cls: 'bmd-file-info', attr: { title: path } });
     file.createDiv({ cls: 'bmd-file', text: name });
     if (parts.length) file.createDiv({ cls: 'bmd-directory', text: parts.join(' / ') });
   }
@@ -297,6 +333,7 @@ export class DiffPanel extends ItemView {
     this.cards = plans.map(({ hunk, key, card }, index) => {
       card ??= this.createCard(hunk, key, highlights, state, changesByRow);
       card.hunk = hunk;
+      this.localizeCard(card, index);
       for (const item of card.items) {
         item.change = changesByRow.get(hunk.rows[item.rowIndex]!)!;
         item.snapshot = state; item.revert.disabled = false; item.jump.disabled = false;
@@ -321,6 +358,19 @@ export class DiffPanel extends ItemView {
     if (this.followedLine !== undefined) this.showLine(this.followedLine, false);
   }
 
+  private localizeCard(card: HunkCard, index: number): void {
+    const current = card.hunk.rows.filter((row) => row.newLine !== null);
+    const lines = current.length ? current.map((row) => row.newLine!) : card.hunk.rows.map((row) => row.oldLine!);
+    const from = lines[0]!, to = lines[lines.length - 1]!;
+    const range = current.length
+      ? t(from === to ? '当前第 {from} 行' : '当前第 {from}–{to} 行', { from, to })
+      : t(from === to ? 'HEAD 第 {from} 行' : 'HEAD 第 {from}–{to} 行', { from, to });
+    const label = t('区块 {index} · {range}', { index: index + 1, range });
+    card.heading.setText(label);
+    card.heading.title = t('{label}：定位此区块的第一项改动', { label });
+    card.heading.setAttribute('aria-label', card.heading.title);
+  }
+
   private localizeItem(item: ChangeItem, index: number): void {
     const range = changeRange(item.change);
     const label = t('改动 {index} · {range}', { index: index + 1, range });
@@ -333,8 +383,9 @@ export class DiffPanel extends ItemView {
 
   private createCard(hunk: DiffHunk, key: string, highlights: InlineHighlights, snapshot: ReadyDiffState, changesByRow: Map<DiffRow, LineChange>): HunkCard {
     const element = this.body.createDiv({ cls: 'bmd-diff-region' });
-    element.createDiv({ cls: 'bmd-context-gap', text: '···', attr: { role: 'separator', 'aria-label': t('已省略未修改内容') } });
-    const card: HunkCard = { key, element, rows: [], pairs: new Map(), limited: highlights.limited, hunk, items: [] };
+    const heading = element.createEl('h3', { cls: 'bmd-region-heading' }).createEl('button', { cls: 'bmd-region-jump', attr: { type: 'button' } });
+    const card: HunkCard = { key, element, heading, rows: [], pairs: new Map(), limited: highlights.limited, hunk, items: [] };
+    heading.addEventListener('click', () => this.activateChange(card.items[0]));
     const itemsByChange = new Map<LineChange, ChangeItem>();
     const lines = element.createDiv({ cls: 'bmd-lines' });
     const positions = new Map(hunk.rows.map((row, i) => [row, i]));
@@ -350,7 +401,7 @@ export class DiffPanel extends ItemView {
           const revert = element.createEl('button', { cls: 'bmd-revert', attr: { type: 'button' } });
           setIcon(revert.createSpan({ attr: { 'aria-hidden': 'true' } }), 'undo-2');
           const entry: ChangeItem = { element, jump, revert, rowIndex: index, change, snapshot };
-          jump.addEventListener('click', () => this.host.navigate(entry.snapshot.path, changeAnchor(entry.change, entry.snapshot.diff.lineCount)));
+          jump.addEventListener('click', () => this.activateChange(entry));
           revert.addEventListener('click', () => this.host.revert(entry.snapshot, entry.change));
           item = entry; itemsByChange.set(change, entry); card.items.push(entry);
         }
@@ -363,7 +414,7 @@ export class DiffPanel extends ItemView {
       const oldNumber = line.createSpan({ cls: 'bmd-line-number', attr: { 'aria-hidden': 'true' } });
       const newNumber = line.createSpan({ cls: 'bmd-line-number', attr: { 'aria-hidden': 'true' } });
       const item = change && itemsByChange.get(change);
-      if (item?.rowIndex === index) (row.oldLine !== undefined ? oldNumber : newNumber).replaceWith(item.jump);
+      if (item?.rowIndex === index) (row.oldLine !== null ? oldNumber : newNumber).replaceWith(item.jump);
       line.createSpan({ cls: 'bmd-sign', text: row.kind === 'added' ? '+' : row.kind === 'deleted' ? '−' : ' ' });
       const text = line.createEl('code', { cls: 'bmd-row-text' });
       renderHighlightedText(text, row, highlights.segments.get(row)!);

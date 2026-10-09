@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest';
 import { computeDiff } from '../src/diff';
-import { findDiffLocation, revealDiffRow } from '../src/diff-navigation';
+import { centerDiffChange, findDiffLocation, revealDiffRow } from '../src/diff-navigation';
 
 function separatedChanges() {
   const lines = Array.from({ length: 60 }, (_, i) => `line ${i}`);
@@ -55,6 +55,45 @@ describe('source cursor to diff row mapping', () => {
 
   it('has no navigation target when there are no differences', () => {
     expect(findDiffLocation(computeDiff('same\n', 'same\n'), 0)).toBeUndefined();
+  });
+});
+
+describe('active change centering', () => {
+  function elements(top: number, height: number, contentHeight = 1000) {
+    const body = document.createElement('div'), change = document.createElement('section');
+    body.append(change); body.scrollTop = 100;
+    Object.defineProperties(body, { clientHeight: { value: 200 }, scrollHeight: { value: contentHeight } });
+    vi.spyOn(body, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 400, 200));
+    vi.spyOn(change, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, top, 400, height));
+    return { body, change };
+  }
+
+  it('centers the complete old/new change even when already visible', () => {
+    const { body, change } = elements(220, 60);
+    centerDiffChange(body, change);
+    expect(body.scrollTop).toBe(150);
+  });
+
+  it('shows the beginning of a change taller than the viewport', () => {
+    const { body, change } = elements(350, 500);
+    centerDiffChange(body, change);
+    expect(body.scrollTop).toBe(342);
+  });
+
+  it.each([[10, 20, 1000, 0], [1000, 20, 1000, 800], [150, 20, 100, 0]])('clamps to natural scroll bounds (%s, %s, %s)', (top, height, total, expected) => {
+    const { body, change } = elements(top, height, total);
+    centerDiffChange(body, change);
+    expect(body.scrollTop).toBe(expected);
+  });
+
+  it('leaves focus and outer scrolling alone', () => {
+    const button = document.createElement('button'); document.body.append(button); button.focus();
+    const { body, change } = elements(220, 60);
+    const focus = vi.spyOn(change, 'focus');
+    centerDiffChange(body, change);
+    expect(document.activeElement).toBe(button);
+    expect(focus).not.toHaveBeenCalled();
+    button.remove();
   });
 });
 

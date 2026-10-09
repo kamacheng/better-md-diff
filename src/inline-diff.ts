@@ -135,7 +135,7 @@ function refineLine(before: DiffRow, after: DiffRow, result: InlineHighlights, d
   result.segments.set(after, parts.filter((part) => !part.removed).map((part) => ({ text: part.value.join(''), changed: part.added })));
 }
 
-/** Only pseudo-elements visualize whitespace, so copying still yields actual spaces/tabs. */
+/** Only CSS decorations visualize whitespace, so copying still yields actual spaces/tabs. */
 export function renderHighlightedText(container: HTMLElement, row: DiffRow, segments: readonly InlineSegment[]): void {
   container.replaceChildren();
   container.toggleAttribute('data-source-empty', !row.text);

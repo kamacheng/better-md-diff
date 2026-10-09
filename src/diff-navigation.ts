@@ -37,6 +37,17 @@ export function findDiffLocation(diff: DocumentDiff, line: number): DiffLocation
   return closest;
 }
 
+/** Active navigation centers one complete change, never the surrounding context block. */
+export function centerDiffChange(body: HTMLElement, change: HTMLElement): void {
+  const height = body.clientHeight;
+  if (!height) return;
+  const top = body.getBoundingClientRect().top + body.clientTop;
+  const target = change.getBoundingClientRect();
+  const inset = target.height <= height - 16 ? (height - target.height) / 2 : 8;
+  const next = body.scrollTop + target.top - top - inset;
+  body.scrollTop = Math.max(0, Math.min(next, body.scrollHeight - height));
+}
+
 /** Scroll only the diff body, never the outer workspace or the focused editor. */
 export function revealDiffRow(body: HTMLElement, row: HTMLElement, companion?: HTMLElement): void {
   const viewport = body.getBoundingClientRect();

@@ -72,7 +72,7 @@ describe('searchable settings with legacy support', () => {
     expect(definitions.map((group) => group.heading)).toEqual(['显示与排版', '定位联动', '刷新节奏', 'Git 与还原']);
     expect(definitions.flatMap((group) => group.items.map((item) => item.name))).toEqual([
       '在编辑正文显示差异标记', '差异面板字号', '上下文行数', '突出变化字词', '显示变化空白符',
-      '左侧选行定位右侧', '右侧前后按钮定位原文', '编辑后刷新延迟', 'Git 变化检测间隔',
+      '左侧选行定位右侧', '右侧导航定位原文', '编辑后刷新延迟', 'Git 变化检测间隔',
       '文档大小上限', '文档行数上限', 'Git 可执行文件', '还原安全说明',
     ]);
     expect(host.applySettings).not.toHaveBeenCalled();
