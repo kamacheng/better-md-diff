@@ -38,6 +38,12 @@
 
 **GitHub artifact attestations**：工作流已经配置，但只有在 GitHub 上对新标签成功执行并发布其原始签署附件后，才能验证来源证明。不应声称未执行的工作流已经清除了线上提示。
 
+## 0.4.0 发布前依赖核查
+
+- `npm audit --omit=dev` 未发现已知生产依赖漏洞；这不是整个工具链或宿主“零风险”的声明。
+- 开发依赖 `source-map-js` 从 1.2.1 更新至 1.2.2，修复 [GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q) 的索引 source-map 拒绝服务问题；未改变运行时依赖或最低 Obsidian 版本。锁文件通过 npm 10 重新生成兼容元数据。
+- 完整审计仍有三条中等风险的开发链条目：SDK 依赖的 Moment，以及传播至 `obsidian`、`eslint-plugin-obsidianmd` 的提示（[GHSA-4p3w-j4w9-5jqw](https://github.com/advisories/GHSA-4p3w-j4w9-5jqw)）。这些 npm 包不随插件打包，插件也未调用该 locale 接口；未为了清零审计而采用 `npm audit fix --force` 建议的旧版 lint 插件回退。后续 SDK/工具链升级应独立验证。
+
 ## 如何复核
 
 ```bash

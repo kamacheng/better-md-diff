@@ -32,7 +32,7 @@ SCENES = [
 
 
 def git(vault, *command):
-    return subprocess.run(['git', *command], cwd=vault, check=True, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(['git', *command], cwd=vault, check=True, capture_output=True, text=True, encoding='utf-8').stdout.strip()
 
 
 def stop_owned_process(process):

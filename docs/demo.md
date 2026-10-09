@@ -4,7 +4,7 @@
 
 [Static preview](images/obsidian-demo.png) · [GIF file](images/obsidian-demo.gif)
 
-This English-only GIF records the **real plugin in desktop Obsidian**, not a browser imitation. There is no separate interactive demo page. The recording uses a newly generated vault, an independent app profile, and a real local Git repository. It does not use personal notes or an existing Obsidian profile.
+This English-only GIF records **Better MD Diff 0.4.0 in desktop Obsidian**, not a browser imitation. There is no separate interactive demo page. The recording uses a newly generated vault, an independent app profile, and a real local Git repository. It does not use personal notes or an existing Obsidian profile.
 
 ## What it shows
 
@@ -42,7 +42,7 @@ FFmpeg is resolved from `PATH`, or supplied with `--ffmpeg "/path/to/ffmpeg"`. T
 
 Outputs:
 
-- `docs/images/obsidian-demo.gif` — approximately 23 seconds, 1120 × 848, 8 fps, approximately 0.6 MiB; exact size/timing can vary between runs.
+- `docs/images/obsidian-demo.gif` — approximately 23 seconds, 1120 × 848, 8 fps, approximately 0.5 MiB; exact size/timing can vary between runs.
 - `docs/images/obsidian-demo.png` — static preview from the same capture.
 - `.test-vault/demo-*/report.json` — assertions, baseline identity, build hashes and media dimensions.
 - `.test-vault/demo-*/raw/` and `frames.json` — original host frames and capture timestamps.
@@ -138,4 +138,10 @@ Unit coverage checks three changes across two groups, singular/plural English, l
 
 Evidence: `.test-vault/host-iptw2fpn/` (English) and `.test-vault/host-eldsowom/` (Chinese), including `change-counts.png`. These use generated notes in fresh profiles, not the user's screenshot content or real vault.
 
-The published GIF above predates these personal changes and has not been regenerated. The earlier personal-branch checkpoint `d3cc5a3` was initially committed/pushed without a main-branch merge or release. The user has now authorized committing/pushing the follow-up range flags, text colors and count labels, then merging/pushing the personal branch into `main`. This includes the earlier review foundations, which remain unconnected to the plugin entrypoint; it is not a completed review workflow. No real-vault installation, version bump, release tag or publication is included.
+### 0.4.0 community release
+
+The GIF and poster above have now been regenerated with the 0.4.0 build. Evidence is in `.test-vault/demo-kzv9o0yu/`: all six recording checks passed, including exact editor content and unchanged Git HEAD/index. The GIF is 1120 × 848, 184 frames, 23.01 seconds and 506,242 bytes. The Windows recorder explicitly decodes the UTF-8 Git fixture rather than relying on the system GBK locale.
+
+The 0.4.0 candidate also passed `npm run check` (225 tests), fresh English/Chinese host runs (`host-reu7uenr` / `host-fmybq3_m`, 42 checks each), 36 whitespace cases (`whitespace-w3r0ri7v`) and long-document/1,000-line-deletion stability runs (`stability-fmt_9xn4` / `stability-hqelqfer`). One earlier Chinese run (`host-jgkkehk1`) stopped when its renderer execution context was destroyed; that run is retained as failed evidence, not counted as a pass. No product workaround was added for that interruption.
+
+The earlier personal work has been merged into `main`, and the user has authorized the 0.4.0 community release after trying the updated UI. Both READMEs now document flags, colors, change/group counts and navigation. Only the implemented local-HEAD workflow is advertised; the review/storage foundations remain unconnected to the entrypoint and GitLab is not enabled. Validation and recording still use isolated vaults; no real-vault installation is part of this process.
