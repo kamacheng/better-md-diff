@@ -8,6 +8,7 @@ import { installObsidianDom } from './helpers/obsidian-dom';
 import { LocalizedError, setLanguage } from '../src/i18n';
 import { prepareChangeRevert } from '../src/revert';
 import { selectedDiffText } from '../src/diff-copy';
+import paragraphs from './fixtures/blank-alignment.json';
 
 installObsidianDom(document);
 let panel: DiffPanel;
@@ -56,6 +57,26 @@ describe('diff panel integration', () => {
       'Current line 2 · 1 change', 'Current line 4 · 1 change', 'Current line 21 · 1 change',
     ]);
     expect(document.querySelector('.bmd-progress')?.textContent).toBe('Change 3 / 3');
+  });
+
+  it('pairs paragraphs within the corrected actions and restores only the selected group', async () => {
+    const { navigate, revert } = await setup();
+    const text = paragraphs.after.join('\n');
+    await store.refresh('note.md', text, true, async () => ({ content: paragraphs.before.join('\n'), head: 'abc', isNew: false }));
+    const items = document.querySelectorAll('.bmd-change');
+    expect(items).toHaveLength(2);
+    expect(document.querySelector('.bmd-progress')?.textContent).toBe('改动 1 / 2');
+    for (const index of [2, 4, 6, 8, 10]) {
+      const rows = Array.from(items[index < 6 ? 0 : 1]!.querySelectorAll('.bmd-row-text'), el => el.textContent);
+      expect(rows[rows.indexOf(paragraphs.before[index]!) + 1]).toBe(paragraphs.after[index]);
+    }
+    panel.move(1);
+    expect(navigate).toHaveBeenLastCalledWith('note.md', 6, false, true);
+    document.querySelectorAll<HTMLButtonElement>('.bmd-revert')[1]!.click();
+    const [state, change] = revert.mock.calls[0]!;
+    const [edit] = prepareChangeRevert(state, change, text, state.baseline);
+    expect(text.slice(0, edit!.from) + edit!.text + text.slice(edit!.to))
+      .toBe([...paragraphs.after.slice(0, 6), ...paragraphs.before.slice(6)].join('\n'));
   });
 
   it('labels display blocks separately from independently actionable changes', async () => {

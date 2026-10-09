@@ -6,7 +6,9 @@
 
 ![Obsidian demo: edit, inspect a deletion, restore one change, and undo](docs/images/obsidian-demo.gif)
 
-《傲慢与偏见》节选及演示改动，使用插件 0.4.0 在桌面版英文 Obsidian 中实录。[演示说明](docs/demo.md) · [0.4.0 更新说明](docs/releases/0.4.0.md)。
+《傲慢与偏见》节选及演示改动，使用插件 0.4.0 在桌面版英文 Obsidian 中实录。[演示说明](docs/demo.md) · [0.4.1 更新说明](docs/releases/0.4.1.md)。
+
+**0.4.1 修复重复空行附近的段落错配**，包括由此产生的误导性删除旗标与逐项还原范围。
 
 ## 安装
 
@@ -41,7 +43,7 @@
 
 ## 当前范围
 
-0.4.0 对比的是**本地 Git HEAD**。基于认可内容的审阅工作流、GitLab 版本对比尚未开放。
+当前版本对比的是**本地 Git HEAD**。基于认可内容的审阅工作流、GitLab 版本对比尚未开放。
 
 ## 许可证
 

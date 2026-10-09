@@ -62,11 +62,15 @@ flags_current = flags_before.replace('Keep before additions.\n', 'Keep before ad
 blocks_before = '# Generated blocks\n\n| A | B |\n| --- | --- |\n| old | keep |\n\n## Folded changes\n\nFirst old.\n\nKeep section context.\n\nSecond old.\n'
 blocks_current = blocks_before.replace('| old |', '| new |').replace('First old.', 'First new.').replace('Second old.', 'Second new.')
 (vault / 'blocks.md').write_text(blocks_before, encoding='utf-8')
+alignment = json.loads((repo / 'tests' / 'fixtures' / 'blank-alignment.json').read_text(encoding='utf-8'))
+alignment_before = '\n'.join(alignment['before'])
+alignment_current = '\n'.join(alignment['after'])
+(vault / 'alignment.md').write_text(alignment_before, encoding='utf-8')
 large = ''.join(f'{i:05d} ' + 'abcdefghij ' * 8 + '\n' for i in range(30_000))
 clean_path = '版本规划/修订/2026-09-18/功能规划-修订-2026-09-18.md'
 (vault / clean_path).parent.mkdir(parents=True)
 (vault / clean_path).write_text('# Generated clean example\n', encoding='utf-8')
-for command in [['init', '-q'], ['config', 'user.name', 'Smoke Test'], ['config', 'user.email', 'smoke@example.invalid'], ['config', 'commit.gpgsign', 'false'], ['config', 'core.autocrlf', 'false'], ['add', 'sample.md', 'items.md', 'navigation.md', 'spaces.md', 'flags.md', 'blocks.md', clean_path], ['commit', '-qm', 'baseline']]:
+for command in [['init', '-q'], ['config', 'user.name', 'Smoke Test'], ['config', 'user.email', 'smoke@example.invalid'], ['config', 'commit.gpgsign', 'false'], ['config', 'core.autocrlf', 'false'], ['add', 'sample.md', 'items.md', 'navigation.md', 'spaces.md', 'flags.md', 'blocks.md', 'alignment.md', clean_path], ['commit', '-qm', 'baseline']]:
     subprocess.run(['git', *command], cwd=vault, check=True, capture_output=True)
 (vault / 'navigation.md').write_text(nav_current, encoding='utf-8')
 with socket.socket() as sock:
@@ -453,6 +457,45 @@ try:
         definitions = page.evaluate("app.setting.pluginTabs.find(t => t.plugin?.manifest?.id === 'better-md-diff')?.getSettingDefinitions().flatMap(s => s.items).map(s => s.name)")
         assert definitions and len(definitions) == 13
         report['checks'].append('13 searchable settings registered in real host')
+        for source in [True, False]:
+            page.evaluate("""async ([text, source]) => {
+              const leaf = app.workspace.getLeavesOfType('markdown')[0];
+              await leaf.openFile(app.vault.getAbstractFileByPath('alignment.md'));
+              await leaf.setViewState({type:'markdown',state:{file:'alignment.md',mode:'source',source}});
+              leaf.view.editor.setValue(text);
+              leaf.view.editor.setCursor({line:0,ch:0});
+              await app.plugins.plugins['better-md-diff'].openDiff('alignment.md');
+            }""", [alignment_current, source])
+            page.wait_for_function("text => app.plugins.plugins['better-md-diff'].store.get('alignment.md')?.current === text && document.querySelectorAll('.bmd-change').length === 2", arg=alignment_current)
+            page.wait_for_function("JSON.stringify([...document.querySelectorAll('.bmd-gutter-marker')].map(el => el.textContent)) === JSON.stringify(['~3','~5'])")
+            assert page.locator('.bmd-gutter-marker--deleted').count() == 0
+            assert page.locator('.bmd-region-heading').count() == 1
+            page.locator('.bmd-gutter-marker').first.click()
+            page.wait_for_function("prefix => document.querySelector('.bmd-progress')?.textContent === `${prefix} 1 / 2`", arg=progress_prefix)
+            for index in [2, 4, 6, 8, 10]:
+                texts = page.locator('.bmd-change').nth(0 if index < 6 else 1).locator('.bmd-row-text').all_text_contents()
+                assert texts[texts.index(alignment['before'][index]) + 1] == alignment['after'][index], 'Each old paragraph must be adjacent to its own current text'
+            page.locator('.bmd-gutter-marker').nth(1).click()
+            page.wait_for_function("prefix => document.querySelector('.bmd-progress')?.textContent === `${prefix} 2 / 2`", arg=progress_prefix)
+            assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == alignment_current
+            page.wait_for_function("document.querySelectorAll('.notice').length === 0", timeout=20000)
+            page.screenshot(path=str(case / ('blank-alignment-source.png' if source else 'blank-alignment-live-preview.png')))
+            expected = [
+                '\n'.join(alignment['before'][:5] + alignment['after'][5:]),
+                '\n'.join(alignment['after'][:6] + alignment['before'][6:]),
+            ]
+            for index, text in enumerate(expected):
+                page.locator('.bmd-revert').nth(index).click()
+                page.get_by_role('button', name=confirm_label, exact=True).click()
+                page.get_by_role('button', name=confirm_label, exact=True).wait_for(state='hidden')
+                page.wait_for_function("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue() === text", arg=text)
+                page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.focus()")
+                page.keyboard.press('Meta+z' if os.sys.platform == 'darwin' else 'Control+z')
+                page.wait_for_function("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue() === text", arg=alignment_current)
+                page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('alignment.md')")
+                page.wait_for_function("text => app.plugins.plugins['better-md-diff'].store.get('alignment.md')?.current === text && document.querySelectorAll('.bmd-change').length === 2", arg=alignment_current)
+        page.evaluate("async () => { const leaf = app.workspace.getLeavesOfType('markdown')[0]; await leaf.setViewState({type:'markdown',state:{file:'alignment.md',mode:'source',source:true}}); }")
+        report['checks'].append('repeated blanks keep old/new paragraphs paired, show only ~3/~5 flags, and restore either group independently with native undo in source and Live Preview')
         page.evaluate("app.workspace.getLeavesOfType('markdown')[0].openFile(app.vault.getAbstractFileByPath('items.md'))")
         page.evaluate("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.setValue(text)", items_current)
         page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('items.md')")

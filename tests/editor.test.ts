@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { editorDiffExtension } from '../src/editor';
 import { DiffStore } from '../src/store';
 import { installObsidianDom } from './helpers/obsidian-dom';
+import paragraphs from './fixtures/blank-alignment.json';
 
 installObsidianDom(document);
 
@@ -124,6 +125,19 @@ describe('CodeMirror source and live-preview extension', () => {
       expect(open).toHaveBeenLastCalledWith('note.md', 4, false);
     }
     expect(view!.state.doc.toString()).toBe(after);
+  });
+
+  it('marks the two corrected paragraph ranges without a spurious deletion boundary', async () => {
+    const text = paragraphs.after.join('\n');
+    const { open } = await setup(paragraphs.before.join('\n'), text);
+    const flags = Array.from(document.querySelectorAll<HTMLButtonElement>('.bmd-gutter-marker'));
+    expect(flags.map(flag => flag.textContent)).toEqual(['~3', '~5']);
+    expect(flags[0]!.title).toContain('修改当前 3 行（原 3 行）');
+    expect(flags[1]!.title).toContain('修改当前 5 行（原 5 行）');
+    expect(document.querySelector('.bmd-gutter-range--deleted')).toBeNull();
+    flags[1]!.click();
+    expect(open).toHaveBeenLastCalledWith('note.md', 6, false);
+    expect(view!.state.doc.toString()).toBe(text);
   });
 
   it('counts modified current lines rather than adding old and new line totals', async () => {

@@ -6,7 +6,9 @@ Compare Markdown with **Git HEAD (the latest commit)** in Obsidian, highlight ch
 
 ![Obsidian demo: edit, inspect a deletion, restore one change, and undo](docs/images/obsidian-demo.gif)
 
-Recorded with Better MD Diff 0.4.0 in desktop Obsidian using a public-domain excerpt from *Pride and Prejudice* with demonstration edits. [Demo details](docs/demo.md) · [0.4.0 release notes](docs/releases/0.4.0.md).
+Recorded with Better MD Diff 0.4.0 in desktop Obsidian using a public-domain excerpt from *Pride and Prejudice* with demonstration edits. [Demo details](docs/demo.md) · [0.4.1 release notes](docs/releases/0.4.1.md).
+
+**0.4.1 fixes paragraph misalignment around repeated blank lines**, including misleading deletion flags and the resulting per-change restoration scopes.
 
 ## Installation
 
@@ -41,7 +43,7 @@ The plugin never stages, commits, or pushes. Restoration checks the current note
 
 ## Scope
 
-Version 0.4.0 compares against **local Git HEAD**. Accepted-baseline review and GitLab comparison are not yet available.
+This release compares against **local Git HEAD**. Accepted-baseline review and GitLab comparison are not yet available.
 
 ## License
 

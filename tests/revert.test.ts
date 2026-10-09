@@ -3,6 +3,7 @@ import { computeDiff, normalizeText } from '../src/diff';
 import { executeChangeRevert, prepareChangeRevert, type RevertEdit } from '../src/revert';
 import type { GitBaseline } from '../src/git';
 import type { ReadyDiffState } from '../src/store';
+import paragraphs from './fixtures/blank-alignment.json';
 
 function snapshot(before: string, current: string, context = 3): ReadyDiffState {
   return { status: 'ready', path: 'test.md', current: normalizeText(current), baseline: { content: before, head: 'head-a', isNew: false }, diff: computeDiff(before, current, context) };
@@ -41,6 +42,20 @@ describe('independent change restoration', () => {
     expect(revertAll(before, current)).toBe(before);
   });
 
+  it.each([0, 1, 3, 10])('restores the correct paragraph group across repeated blank lines (context=%i)', (context) => {
+    const before = paragraphs.before.join('\n');
+    for (const eol of ['\n', '\r\n']) {
+      const current = paragraphs.after.join(eol);
+      const state = snapshot(before, current, context);
+      expect(state.diff.changes).toHaveLength(2);
+      const first = prepareChangeRevert(state, state.diff.changes[0]!, current, state.baseline);
+      const second = prepareChangeRevert(state, state.diff.changes[1]!, current, state.baseline);
+      expect(apply(current, first)).toBe([...paragraphs.before.slice(0, 5), ...paragraphs.after.slice(5)].join(eol));
+      expect(apply(current, second)).toBe([...paragraphs.after.slice(0, 6), ...paragraphs.before.slice(6)].join(eol));
+      expect(apply(current, [...first, ...second])).toBe(paragraphs.before.join(eol));
+    }
+  });
+
   it('keeps contiguous old/new replacement rows together as one operation', () => {
     const state = snapshot('a\nb\nkeep\n', 'A\nB\nC\nkeep\n');
     expect(state.diff.changes).toHaveLength(1);
@@ -75,6 +90,30 @@ describe('independent change restoration', () => {
   it('clears a newly tracked file without deleting it', () => {
     const state = snapshot('', 'new file\n'); state.baseline.isNew = true; state.baseline.head = null;
     expect(apply(state.current, prepareChangeRevert(state, state.diff.changes[0]!, state.current, state.baseline))).toBe('');
+  });
+
+  it('round-trips repeated blanks, duplicate paragraphs, Markdown and EOF changes without losing text', () => {
+    let seed = 41;
+    const random = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
+    const pool = ['', '', ' \t', '**Alpha:** paragraph.', 'Beta paragraph.', '重复内容 👩‍💻', '| A | B |', '```'];
+    for (let sample = 0; sample < 200; sample++) {
+      const old: string[] = [], current: string[] = [];
+      for (let i = 0; i < 24; i++) {
+        const line = pool[Math.floor(random() * pool.length)]!;
+        old.push(line);
+        if (random() < 0.2) current.push('新增一行');
+        if (random() < 0.2) continue;
+        current.push(random() < 0.4 ? line + '1' : line);
+      }
+      const before = old.join('\n') + (random() < 0.5 ? '\n' : '');
+      const after = current.join('\n') + (random() < 0.5 ? '\n' : '');
+      expect(revertAll(before, after)).toBe(before);
+      expect(revertAll(after, before, 0)).toBe(after);
+      const rows = computeDiff(before, after, 100).hunks.flatMap((hunk) => hunk.rows);
+      const project = (excluded: 'added' | 'deleted') => rows.filter((row) => row.kind !== excluded).map((row) => row.text + (row.noNewline ? '' : '\n')).join('');
+      expect(project('added')).toBe(before);
+      expect(project('deleted')).toBe(after);
+    }
   });
 
   it('round-trips deterministic mixed insertions, deletions and replacements', () => {

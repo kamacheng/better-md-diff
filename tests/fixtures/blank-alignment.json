@@ -1,0 +1,34 @@
+{
+  "before": [
+    "Start",
+    "",
+    "**Alpha:** a narrow image.",
+    "",
+    "Beta paragraph describes width.",
+    "",
+    "**Gamma:** offset = width * scale.",
+    "",
+    "Delta paragraph describes a sample.",
+    "",
+    "**Epsilon:** use the default value.",
+    "",
+    "End",
+    ""
+  ],
+  "after": [
+    "Start",
+    "",
+    "**Alpha:** a narrow image.  ",
+    "1",
+    "Beta1 paragraph describes width.",
+    "",
+    "**Gamma:** offset = width1 * scale.",
+    "1",
+    "Delta1 paragraph describes a sample.",
+    "1",
+    "**Epsilon:** use1 the default value.",
+    "",
+    "End",
+    ""
+  ]
+}
