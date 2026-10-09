@@ -13,7 +13,7 @@ describe('interface language', () => {
     const error = new LocalizedError('文档不在本次刷新范围内。');
     setLanguage('en');
     expect(t('刷新')).toBe('Refresh');
-    expect(t('第 {index} / {total} 处', { index: 2, total: 3 })).toBe('Change 2 / 3');
+    expect(t('改动 {index} / {total}', { index: 2, total: 3 })).toBe('Change 2 / 3');
     expect(error.message).toBe('The document is not in this refresh batch.');
     setLanguage('zh-CN');
     expect(error.message).toBe('文档不在本次刷新范围内。');

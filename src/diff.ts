@@ -133,9 +133,3 @@ export function changeRange(change: LineChange): string {
   const from = change.from + 1, to = change.to;
   return from === to ? t('当前第 {from} 行', { from }) : t('当前第 {from}–{to} 行', { from, to });
 }
-
-export function changeLabel(changes: LineChange[]): string {
-  const added = changes.reduce((sum, change) => sum + change.added, 0);
-  const deleted = changes.reduce((sum, change) => sum + change.deleted, 0);
-  return t('相对 HEAD：新增 {added} 行，删除 {deleted} 行。查看差异', { added, deleted });
-}

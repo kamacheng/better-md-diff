@@ -56,11 +56,17 @@ nav_current = nav_current.replace('Navigation line 80.\n', '')
 spaces_before = ''.join(f'| 功能 {i} | 处理结果 |\n' for i in range(6)) + '\nUnchanged tail.\n\n'
 spaces_current = spaces_before.replace('结果 |', '结果' + ' ' * 60 + '|') + '制表符\t结尾\n'
 (vault / 'spaces.md').write_text(spaces_before, encoding='utf-8')
+flags_before = '# Generated source flags\n\nKeep before additions.\nKeep before modifications.\nOld line one.\nOld line two.\nKeep before deletion.\n\n---\n\nDeleted line one.\nDeleted line two.\n## Native heading\nKeep after.\n'
+flags_current = flags_before.replace('Keep before additions.\n', 'Keep before additions.\nAdded one.\nAdded two.\nAdded three: ' + 'wrapped text ' * 12 + '\n').replace('Old line one.\nOld line two.', 'Modified one.\nModified two: ' + 'wrapped text ' * 12).replace('Deleted line one.\nDeleted line two.\n', '')
+(vault / 'flags.md').write_text(flags_before, encoding='utf-8')
+blocks_before = '# Generated blocks\n\n| A | B |\n| --- | --- |\n| old | keep |\n\n## Folded changes\n\nFirst old.\n\nKeep section context.\n\nSecond old.\n'
+blocks_current = blocks_before.replace('| old |', '| new |').replace('First old.', 'First new.').replace('Second old.', 'Second new.')
+(vault / 'blocks.md').write_text(blocks_before, encoding='utf-8')
 large = ''.join(f'{i:05d} ' + 'abcdefghij ' * 8 + '\n' for i in range(30_000))
 clean_path = '版本规划/修订/2026-09-18/功能规划-修订-2026-09-18.md'
 (vault / clean_path).parent.mkdir(parents=True)
 (vault / clean_path).write_text('# Generated clean example\n', encoding='utf-8')
-for command in [['init', '-q'], ['config', 'user.name', 'Smoke Test'], ['config', 'user.email', 'smoke@example.invalid'], ['config', 'commit.gpgsign', 'false'], ['config', 'core.autocrlf', 'false'], ['add', 'sample.md', 'items.md', 'navigation.md', 'spaces.md', clean_path], ['commit', '-qm', 'baseline']]:
+for command in [['init', '-q'], ['config', 'user.name', 'Smoke Test'], ['config', 'user.email', 'smoke@example.invalid'], ['config', 'commit.gpgsign', 'false'], ['config', 'core.autocrlf', 'false'], ['add', 'sample.md', 'items.md', 'navigation.md', 'spaces.md', 'flags.md', 'blocks.md', clean_path], ['commit', '-qm', 'baseline']]:
     subprocess.run(['git', *command], cwd=vault, check=True, capture_output=True)
 (vault / 'navigation.md').write_text(nav_current, encoding='utf-8')
 with socket.socket() as sock:
@@ -105,6 +111,7 @@ try:
         # Test-only inspection of this fresh profile's app preference; production uses getLanguage().
         report['language'] = page.evaluate("localStorage.getItem('language') || 'en'")
         chinese = report['language'].lower().startswith('zh')
+        progress_prefix = '改动' if chinese else 'Change'
         confirm_label = '确认还原' if chinese else 'Confirm restoration'
         # This is exclusively our freshly generated, identity-checked vault and our own build.
         # A fresh host asks for author trust asynchronously; enabling a plugin before consent races it.
@@ -151,14 +158,15 @@ try:
         page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('sample.md')")
         assert page.evaluate("app.workspace.getLeavesOfType('better-md-diff-view').length") == 1
         report['checks'].append('top sidebar tab, existing views preserved, repeated opening reuses one leaf')
-        page.locator('.bmd-progress').filter(has_text='1 / 2').wait_for(timeout=30000)
-        assert page.locator('.bmd-progress').get_attribute('aria-label') == ('第 1 / 2 处' if chinese else 'Change 1 / 2')
+        page.locator('.bmd-progress').filter(has_text=f'{progress_prefix} 1 / 2').wait_for(timeout=30000)
+        assert page.locator('.bmd-progress').inner_text() == f'{progress_prefix} 1 / 2'
+        assert page.locator('.bmd-progress').get_attribute('aria-label') == f'{progress_prefix} 1 / 2'
         command_name = page.evaluate("app.commands.commands['better-md-diff:next-change'].name")
         assert ('定位下一处差异' if chinese else 'Go to next change') in command_name
         report['checks'].append('panel and command language follow the isolated host language')
         report['checks'].append('two independent change actions in the real panel')
         assert page.locator('.bmd-region-heading').count() == 2
-        assert page.locator('.bmd-region-heading').first.inner_text() == ('区块 1 · 当前第 1–5 行' if chinese else 'Block 1 · Current lines 1–5')
+        assert page.locator('.bmd-region-heading').first.inner_text() == ('当前 1–5 行 · 1 处改动' if chinese else 'Current lines 1–5 · 1 change')
         assert page.locator('.bmd-region-heading button').count() == 2
         page.locator('.notice.is-loading').wait_for(state='hidden', timeout=60000)
         assert page.locator('.workspace-tab-header .lucide-file-diff').count() == 1
@@ -195,7 +203,7 @@ try:
         assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == current
         report['checks'].append('keyboard order, visible focus, localized guide, native focus trap, Escape/close return focus; no sidebar reflow or source edits')
         page.locator('.bmd-next').click()
-        assert page.locator('.bmd-progress').inner_text() == '2 / 2'
+        assert page.locator('.bmd-progress').inner_text() == f'{progress_prefix} 2 / 2'
         report['checks'].append('next-change navigation')
         page.locator('.bmd-previous').click()
         page.locator('.bmd-revert').first.click()
@@ -213,6 +221,27 @@ try:
         page.get_by_role('button', name='取消' if chinese else 'Cancel', exact=True).click()
         assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == current
         report['checks'].append('cancel leaves editor untouched')
+        # Three operations can share two reading groups; their labels and action scopes differ.
+        nearby = current.replace('line 3\n', 'nearby change\n')
+        page.evaluate("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.setValue(text)", nearby)
+        page.wait_for_function("text => document.querySelector('.bmd-progress').textContent === text", arg=f'{progress_prefix} 1 / 3')
+        assert page.locator('.bmd-region-heading').all_text_contents() == (
+            ['当前 1–7 行 · 2 处改动', '当前 18–24 行 · 1 处改动'] if chinese
+            else ['Current lines 1–7 · 2 changes', 'Current lines 18–24 · 1 change'])
+        page.wait_for_function("document.querySelectorAll('.notice').length === 0", timeout=20000)
+        page.locator('.bmd-panel').screenshot(path=str(case / 'change-counts.png'))
+        page.locator('.bmd-next').click()
+        assert page.locator('.bmd-progress').inner_text() == f'{progress_prefix} 2 / 3'
+        assert page.locator('.bmd-diff-region--selected .bmd-region-heading').inner_text().endswith('2 处改动' if chinese else '2 changes')
+        page.locator('.bmd-next').click()
+        assert page.locator('.bmd-progress').inner_text() == f'{progress_prefix} 3 / 3'
+        assert page.locator('.bmd-diff-region--selected .bmd-region-heading').inner_text().endswith('1 处改动' if chinese else '1 change')
+        page.locator('.bmd-revert').nth(1).click()
+        page.get_by_role('button', name=confirm_label, exact=True).click()
+        page.wait_for_function("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue() === text", arg=current)
+        page.wait_for_function("document.querySelectorAll('.bmd-change').length === 2")
+        assert all(title.endswith('1 处改动' if chinese else '1 change') for title in page.locator('.bmd-region-heading').all_text_contents())
+        report['checks'].append('explicit global change progress and per-group counts distinguish three actions from two reading groups; next visits each item and restoration only removes the selected nearby change')
         # A long fixture includes nearby edits, a pure deletion, and natural document boundaries.
         page.evaluate("app.workspace.getLeavesOfType('markdown')[0].openFile(app.vault.getAbstractFileByPath('navigation.md'))")
         page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('navigation.md')")
@@ -270,7 +299,7 @@ try:
             page.evaluate("app.workspace.getLeavesOfType('better-md-diff-view')[0].view.showLine(0)")
             if mode == 'source':
                 assert page.locator('.markdown-source-view.is-live-preview').count() == (0 if source else 1)
-            page.wait_for_function("document.querySelector('.bmd-progress').textContent === '1 / 7'")
+            page.wait_for_function("text => document.querySelector('.bmd-progress').textContent === text", arg=f'{progress_prefix} 1 / 7')
             for selector, index in [('.bmd-next', 1), ('.bmd-next', 2), ('.bmd-next', 3), ('.bmd-previous', 2), ('.bmd-previous', 1), ('.bmd-previous', 0), ('.bmd-previous', 6)]:
                 page.locator(selector).click()
                 # Rendered Markdown may center the source boundary rather than the paragraph's midpoint.
@@ -433,23 +462,25 @@ try:
         deletion_marker = page.locator('.bmd-gutter-marker--deleted').first
         deletion_marker.wait_for()
         assert deletion_marker.inner_text() == '−1'
-        marker_rgb = deletion_marker.evaluate("el => { const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); ctx.fillStyle = getComputedStyle(el).color; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3); }")
+        marker_rgb = deletion_marker.evaluate("el => { const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d'); ctx.fillStyle = getComputedStyle(el, '::before').backgroundColor; ctx.fillRect(0, 0, 1, 1); return [...ctx.getImageData(0, 0, 1, 1).data].slice(0, 3); }")
         assert marker_rgb[0] > marker_rgb[1] and marker_rgb[0] > marker_rgb[2], 'Deletion marker should use the red theme token'
         report['deletion_marker_rgb'] = marker_rgb
         assert page.locator('.cm-line.bmd-line--deleted').count() == 0
-        anchor = page.locator('.cm-line.bmd-deletion-anchor').first
-        assert 'inset' in anchor.evaluate('el => getComputedStyle(el).boxShadow')
-        assert deletion_marker.evaluate('el => getComputedStyle(el).backgroundColor') != 'rgba(0, 0, 0, 0)'
+        assert page.locator('.cm-line.bmd-deletion-anchor').count() == 0
+        assert deletion_marker.evaluate("el => getComputedStyle(el, '::before').clipPath !== 'none'")
+        assert page.locator('.bmd-gutter-range--deleted').first.evaluate("el => getComputedStyle(el, '::before').content === 'none'")
         assert page.locator('.bmd-change-actions').count() == 0
         rows = page.locator('.bmd-change').nth(1).locator('.bmd-row').all()
         row_boxes = [row.bounding_box() for row in rows]
         assert abs(row_boxes[0]['y'] + row_boxes[0]['height'] - row_boxes[1]['y']) < 1, 'Old/new rows should be adjacent'
         context = page.locator('.bmd-row--context .bmd-row-text').first
-        normal = page.locator('.bmd-row--added .bmd-row-text').first
-        assert context.evaluate('el => getComputedStyle(el).color') == normal.evaluate('el => getComputedStyle(el).color')
+        added_text = page.locator('.bmd-row--added .bmd-row-text').first
+        deleted_text = page.locator('.bmd-row--deleted .bmd-row-text').first
+        assert context.evaluate('el => getComputedStyle(el).color') != added_text.evaluate('el => getComputedStyle(el).color'), 'Added text must use green rather than the context color'
+        assert deleted_text.evaluate('el => getComputedStyle(el).color') != added_text.evaluate('el => getComputedStyle(el).color'), 'Old and new text must have distinct red/green foregrounds'
         deletion_marker.click()
         page.wait_for_function("document.querySelector('.bmd-row--deleted.bmd-row--current .bmd-row-text')?.textContent === '升级时：'")
-        report['checks'].append('visible deletion rule and count open the old row without source mutation; adjacent old/new rows keep normal text contrast')
+        report['checks'].append('deletion boundary flag opens the old row without a source rule, tint or mutation; adjacent old/new rows use red/green text')
         assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == items_current
         page.locator('.bmd-revert').nth(1).click()
         assert 'HEAD' in page.locator('.bmd-revert-previews').inner_text()
@@ -497,10 +528,120 @@ try:
                 }""")
                 assert header['height'] <= 130 and header['aligned'] and header['nonOverlapping'], header
                 assert header['toolbarContent'] <= header['toolbarWidth'] + 1, header
-                report['change_layouts'].append({'theme': theme, 'panelWidth': width, **dimensions, 'header': header})
+                palette = page.locator('.bmd-panel').evaluate("""panel => {
+                  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+                  const ctx = canvas.getContext('2d');
+                  const pixel = () => [...ctx.getImageData(0,0,1,1).data].slice(0,3);
+                  const rgb = color => { ctx.clearRect(0,0,1,1); ctx.fillStyle = color; ctx.fillRect(0,0,1,1); return pixel(); };
+                  const background = el => {
+                    const ancestors = []; for (let node = el; node; node = node.parentElement) ancestors.push(node);
+                    ctx.fillStyle = '#fff'; ctx.fillRect(0,0,1,1);
+                    for (const node of ancestors.reverse()) { ctx.fillStyle = getComputedStyle(node).backgroundColor; ctx.fillRect(0,0,1,1); }
+                    return pixel();
+                  };
+                  const luminance = rgb => rgb.map(value => value / 255).map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4).reduce((sum, value, i) => sum + value * [0.2126,0.7152,0.0722][i], 0);
+                  const ratio = (a, b) => (Math.max(a,b) + 0.05) / (Math.min(a,b) + 0.05);
+                  const probe = document.createElement('span'); probe.style.color = 'var(--text-normal)'; panel.append(probe);
+                  const normal = rgb(getComputedStyle(probe).color); probe.remove();
+                  const samples = [...panel.querySelectorAll('.bmd-row-text, mark.bmd-inline-change')].map(el => {
+                    const fg = rgb(getComputedStyle(el).color), bg = background(el);
+                    return {kind:el.closest('.bmd-row').classList.contains('bmd-row--added') ? 'added' : el.closest('.bmd-row').classList.contains('bmd-row--deleted') ? 'deleted' : 'context',
+                      highlight:el.matches('mark'), selected:el.closest('.bmd-row').matches('.bmd-row--current, .bmd-row--paired'), fg, bg, contrast:ratio(luminance(fg),luminance(bg))};
+                  });
+                  return {normal, samples};
+                }""")
+                for sample in palette['samples']:
+                    red, green, blue = sample['fg']
+                    if sample['kind'] == 'added': assert green > red and green > blue, sample
+                    elif sample['kind'] == 'deleted': assert red > green and red > blue, sample
+                    else: assert sample['fg'] == palette['normal'], sample
+                    assert sample['contrast'] >= 4.5, {'theme':theme, **sample}
+                assert any(sample['highlight'] for sample in palette['samples']) and any(sample['selected'] for sample in palette['samples'])
+                report['change_layouts'].append({'theme': theme, 'panelWidth': width, **dimensions, 'header': header, 'palette':palette})
                 page.locator('.bmd-panel').screenshot(path=str(case / f'panel-changes-{theme}-{width}.png'))
         report['checks'].append('light/dark changes at 280/440px: restore controls do not cover text or cause horizontal overflow')
+        report['checks'].append('red deleted / green added text, normal context, and at least 4.5:1 contrast on row, selected-row and changed-word backgrounds in both default themes')
+        text_colors = page.locator('.bmd-row-text').evaluate_all("els => els.map(el => getComputedStyle(el).color)")
+        page.evaluate("async () => { const p = app.plugins.plugins['better-md-diff']; p.settings.inlineHighlights = false; await p.applySettings(); }")
+        page.wait_for_function("document.querySelector('.bmd-panel.bmd-no-inline-highlights')")
+        assert page.locator('.bmd-row-text').evaluate_all("els => els.map(el => getComputedStyle(el).color)") == text_colors
+        assert page.locator('mark.bmd-inline-change').evaluate_all("els => els.length > 0 && els.every(el => getComputedStyle(el).backgroundColor === 'rgba(0, 0, 0, 0)')")
+        assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == items_current
+        page.evaluate("async () => { const p = app.plugins.plugins['better-md-diff']; p.settings.inlineHighlights = true; await p.applySettings(); }")
+        page.wait_for_function("document.querySelector('.bmd-panel:not(.bmd-no-inline-highlights)')")
+        report['checks'].append('disabling changed-word highlighting preserves red/green text and source content; re-enabling restores the existing display setting')
         page.evaluate("document.body.classList.remove('theme-dark'); document.body.classList.add('theme-light')")
+        # Range flags occupy only the fixed gutter, including wrapped logical lines.
+        page.evaluate("app.workspace.getLeavesOfType('markdown')[0].openFile(app.vault.getAbstractFileByPath('flags.md'))")
+        page.evaluate("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.setValue(text)", flags_current)
+        page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('flags.md')")
+        page.wait_for_function("document.querySelectorAll('.bmd-change').length === 3")
+        report['source_flags'] = []
+        for source in [True, False]:
+            page.evaluate("source => app.workspace.getLeavesOfType('markdown')[0].setViewState({type:'markdown',state:{file:'flags.md',mode:'source',source}})", source)
+            page.wait_for_function("[...document.querySelectorAll('.bmd-gutter-marker')].map(el => el.textContent).join(',') === '+3,~2,−2'")
+            for theme in ['light', 'dark']:
+                page.evaluate("theme => { document.body.classList.remove('theme-light','theme-dark'); document.body.classList.add('theme-' + theme); }", theme)
+                metrics = page.locator('.bmd-gutter').evaluate("""gutter => {
+                  const ranges = kind => [...gutter.querySelectorAll('.bmd-gutter-range--' + kind)];
+                  const geometry = kind => ranges(kind).map(el => {
+                    const box = el.getBoundingClientRect(), rail = getComputedStyle(el, '::before');
+                    return {top:box.top, bottom:box.bottom, height:box.height, railTop:parseFloat(rail.top), railBottom:parseFloat(rail.bottom), lineHeight:parseFloat(el.style.getPropertyValue('--bmd-source-line-height'))};
+                  });
+                  return {width:gutter.getBoundingClientRect().width, added:geometry('added'), modified:geometry('modified'),
+                    noDeletionRail:ranges('deleted').every(el => getComputedStyle(el, '::before').content === 'none'),
+                    flags:[...gutter.querySelectorAll('button')].map(el => ({text:el.textContent, width:el.getBoundingClientRect().width, height:el.getBoundingClientRect().height, label:el.title}))};
+                }""")
+                assert metrics['width'] == 32 and metrics['noDeletionRail'], metrics
+                assert len(metrics['added']) == 3 and len(metrics['modified']) == 2, metrics
+                for kind in ['added', 'modified']:
+                    parts = metrics[kind]
+                    assert abs(parts[0]['railTop'] - parts[0]['lineHeight'] / 2) < 1, metrics
+                    assert abs(parts[-1]['railBottom'] - parts[-1]['lineHeight'] / 2) < 1, metrics
+                    assert parts[-1]['height'] > parts[-1]['lineHeight'] * 1.5, 'Fixture must include wrapped last rows'
+                    assert all(abs(left['bottom'] - right['top']) < 1 for left, right in zip(parts, parts[1:])), metrics
+                assert all(flag['width'] == 28 and flag['height'] <= 20 and flag['label'] for flag in metrics['flags']), metrics
+                assert page.locator('.cm-line.bmd-line, .cm-line.bmd-deletion-anchor').count() == 0
+                flag = page.locator('.bmd-gutter-marker--modified')
+                flag.focus()
+                page.keyboard.press('Tab'); page.keyboard.press('Shift+Tab')
+                assert flag.evaluate("el => document.activeElement === el && getComputedStyle(el).outlineStyle !== 'none' && getComputedStyle(el).outlineOffset === '-2px'")
+                page.keyboard.press('Enter')
+                page.wait_for_function("text => document.querySelector('.bmd-progress').textContent === text", arg=f'{progress_prefix} 2 / 3')
+                assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == flags_current
+                report['source_flags'].append({'source':source, 'theme':theme, **metrics})
+                page.screenshot(path=str(case / f'flags-{source}-{theme}.png'))
+        report['checks'].append('counted add/modify flags with connected wrapped-line ranges, deletion-only boundary, fixed gutter, keyboard focus and navigation in source/Live Preview and both themes')
+        page.evaluate("document.body.classList.remove('theme-dark'); document.body.classList.add('theme-light')")
+        page.evaluate("app.workspace.getLeavesOfType('markdown')[0].openFile(app.vault.getAbstractFileByPath('blocks.md'))")
+        page.evaluate("text => app.workspace.getLeavesOfType('markdown')[0].view.editor.setValue(text)", blocks_current)
+        page.evaluate("app.plugins.plugins['better-md-diff'].openDiff('blocks.md')")
+        page.wait_for_function("document.querySelectorAll('.bmd-change').length === 3")
+        page.wait_for_function("document.querySelector('.markdown-source-view.is-live-preview table') && document.querySelector('.bmd-gutter-range--block .bmd-gutter-marker')")
+        table_flag = page.locator('.bmd-gutter-range--block .bmd-gutter-marker').first
+        assert table_flag.inner_text() == '~1'
+        assert table_flag.evaluate("el => getComputedStyle(el.parentElement, '::before').content === 'none'")
+        table_flag.click()
+        page.wait_for_function("text => document.querySelector('.bmd-progress').textContent === text", arg=f'{progress_prefix} 1 / 3')
+        page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.focus()")
+        assert page.evaluate("app.commands.executeCommandById('editor:fold-all')"), 'Native fold command must be available'
+        page.wait_for_function("document.querySelector('.bmd-gutter-range--block .bmd-gutter-marker')?.title.includes('3')")
+        assert page.locator('.bmd-gutter-range--block .bmd-gutter-marker').first.inner_text() == '~1', 'Do not turn three independent changes into a ~3 line count'
+        page.locator('.bmd-gutter-range--block .bmd-gutter-marker').first.click()
+        assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == blocks_current
+        report['checks'].append('real Live Preview table and native folded document retain a labeled first-change flag without fake range rails or merged operation counts')
+        page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.setValue('')")
+        page.wait_for_function("document.querySelector('.bmd-gutter-marker--deleted')?.textContent === '−13'")
+        edge = page.locator('.bmd-gutter-marker--deleted').evaluate("""el => {
+          const flag = el.getBoundingClientRect(), row = el.parentElement.getBoundingClientRect(), label = el.querySelector('.bmd-gutter-label');
+          return {top:flag.top - row.top, bottom:row.bottom - flag.bottom, labelWidth:label.clientWidth, labelContent:label.scrollWidth};
+        }""")
+        assert edge['top'] >= 0 and edge['bottom'] >= 0, edge
+        assert edge['labelContent'] <= edge['labelWidth'], 'Two-digit counts must remain readable inside the fixed flag'
+        page.locator('.bmd-gutter-marker--deleted').click()
+        page.wait_for_function("text => document.querySelector('.bmd-progress').textContent === text", arg=f'{progress_prefix} 1 / 1')
+        assert page.evaluate("app.workspace.getLeavesOfType('markdown')[0].view.editor.getValue()") == ''
+        report['checks'].append('empty-document deletion flag stays inside the first row, preserves a two-digit count and opens the deleted text')
         # Add the large fixture after startup indexing; do not race the fresh-host indexer.
         (vault / 'large.md').write_text(large, encoding='utf-8')
         for command in [['add', 'large.md'], ['commit', '-qm', 'large fixture']]:

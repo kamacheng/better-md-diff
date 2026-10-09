@@ -1,6 +1,6 @@
-import { StateEffect, type Extension, type Range } from '@codemirror/state';
-import { BlockType, Decoration, type DecorationSet, EditorView, gutter, GutterMarker, ViewPlugin, type ViewUpdate } from '@codemirror/view';
-import { changeAnchor, changeLabel, normalizeText, type ChangeKind, type LineChange } from './diff';
+import { StateEffect, type Extension } from '@codemirror/state';
+import { BlockType, EditorView, gutter, GutterMarker, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { changeAnchor, normalizeText, type LineChange } from './diff';
 import type { DiffStore } from './store';
 import { t } from './i18n';
 
@@ -14,26 +14,55 @@ export interface EditorDiffHost {
 
 export const refreshDiff = StateEffect.define<null>();
 
+interface ChangeSpan {
+  change: LineChange;
+  from: number;
+  to: number;
+  line: number;
+}
+
 class DiffMarker extends GutterMarker {
-  constructor(private kind: ChangeKind, private label: string, private deleted: number, private open: () => void) { super(); }
+  private label: string;
+
+  constructor(private span: ChangeSpan, private start: boolean, private end: boolean, private blockCount: number,
+    private boundary: 'first' | 'before' | 'after', private lineHeight: number, private open: () => void) {
+    super();
+    const { kind, added, deleted } = span.change;
+    this.label = kind === 'deleted' ? t('已删除 {count} 行，查看对应改动', { count: deleted })
+      : kind === 'added' ? t('新增 {count} 行，查看对应改动', { count: added })
+      : t('修改当前 {count} 行（原 {deleted} 行），查看对应改动', { count: added, deleted });
+    if (blockCount) this.label += ' ' + t('此显示块包含 {count} 项改动，点击查看首项；具体范围见右侧。', { count: blockCount });
+  }
+
+  eq(other: DiffMarker): boolean {
+    return this.span === other.span && this.start === other.start && this.end === other.end
+      && this.blockCount === other.blockCount && this.boundary === other.boundary
+      && this.lineHeight === other.lineHeight && this.label === other.label;
+  }
+
   toDOM(view: EditorView): HTMLElement {
-    const button = view.dom.ownerDocument.adoptNode(createEl('button'));
-    button.className = `bmd-gutter-marker bmd-gutter-marker--${this.kind}`;
-    button.type = 'button';
-    button.textContent = this.kind === 'added' ? '+' : this.kind === 'deleted' ? `−${this.deleted}` : '~';
+    const { kind, added, deleted } = this.span.change;
+    const element = view.dom.ownerDocument.adoptNode(createDiv());
+    element.className = `bmd-gutter-range bmd-gutter-range--${kind}`;
+    element.style.setProperty('--bmd-source-line-height', `${this.lineHeight}px`);
+    if (this.start) element.classList.add('bmd-gutter-range--start');
+    if (this.end) element.classList.add('bmd-gutter-range--end');
+    if (this.blockCount) element.classList.add('bmd-gutter-range--block');
+    if (kind === 'deleted') element.classList.add(`bmd-gutter-range--${this.boundary}`);
+    if (!this.start && !this.blockCount) { element.setAttribute('aria-hidden', 'true'); return element; }
+    const button = element.createEl('button', { cls: `bmd-gutter-marker bmd-gutter-marker--${kind}`, attr: { type: 'button' } });
+    button.createSpan({ cls: 'bmd-gutter-label', text: kind === 'deleted' ? `−${deleted}` : `${kind === 'added' ? '+' : '~'}${added}` });
     button.title = this.label;
     button.setAttribute('aria-label', this.label);
     button.addEventListener('mousedown', (event) => event.preventDefault());
     button.addEventListener('click', (event) => { event.stopPropagation(); this.open(); });
-    return button;
+    return element;
   }
 }
 
 export function editorDiffExtension(host: EditorDiffHost): Extension {
   const plugin = ViewPlugin.fromClass(class {
-    decorations: DecorationSet = Decoration.none;
-    markers = new Map<number, GutterMarker>();
-    private positions: number[] = [];
+    private spans: ChangeSpan[] = [];
     private path?: string;
     private unsubscribe: () => void;
     private destroyed = false;
@@ -71,52 +100,43 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
 
     private build(): void {
       this.path = host.getPath(this.view);
-      this.markers.clear();
-      this.positions = [];
-      this.decorations = Decoration.none;
+      this.spans = [];
       if (!this.path || !host.enabled()) return;
       const state = host.store.get(this.path);
-      if (state?.status !== 'ready' || state.current !== normalizeText(this.view.state.doc.toString())) return;
-      const lines = new Map<number, LineChange[]>();
-      for (const change of state.diff.changes) {
-        const start = changeAnchor(change, this.view.state.doc.lines);
-        const end = Math.max(start + 1, Math.min(change.to, this.view.state.doc.lines));
-        for (let line = start; line < end; line++) {
-          const existing = lines.get(line) ?? [];
-          existing.push(change);
-          lines.set(line, existing);
-        }
-      }
-      const decorations: Range<Decoration>[] = [];
-      for (const [number, changes] of [...lines].sort(([a], [b]) => a - b)) {
-        const from = this.view.state.doc.line(number + 1).from;
-        const kind = changes.length > 1 ? 'modified' : changes[0]!.kind;
-        const deleted = changes.reduce((sum, change) => sum + change.deleted, 0);
-        const label = kind === 'deleted' ? t('已删除 {count} 行，查看对应改动', { count: deleted }) : changeLabel(changes);
-        // The rule marks a deletion boundary, not deleted current text. Never tint its anchor line.
-        const className = kind === 'deleted' ? 'bmd-deletion-anchor' : `bmd-line bmd-line--${kind}`;
-        decorations.push(Decoration.line({ attributes: { class: className, title: label } }).range(from));
-        const path = this.path;
-        this.positions.push(from);
-        this.markers.set(from, new DiffMarker(kind, label, deleted, () => host.open(path, number, kind === 'deleted')));
-      }
-      this.decorations = Decoration.set(decorations);
+      const doc = this.view.state.doc;
+      if (state?.status !== 'ready' || state.current !== normalizeText(doc.toString())) return;
+      this.spans = state.diff.changes.map((change) => {
+        const line = changeAnchor(change, doc.lines);
+        const last = Math.max(line, Math.min(change.to - 1, doc.lines - 1));
+        return { change, line, from: doc.line(line + 1).from, to: doc.line(last + 1).to };
+      });
     }
 
-    markerForRange(from: number, to: number): GutterMarker | null {
-      // Live Preview replaces tables/callouts with block widgets spanning multiple source lines.
-      let low = 0, high = this.positions.length;
+    markerForRange(from: number, to: number, widget = false): GutterMarker | null {
+      // Widget ranges are end-exclusive. Insertion widgets must not duplicate a text-line flag.
+      if (widget) { if (from === to) return null; to--; }
+      let low = 0, high = this.spans.length;
       while (low < high) {
         const middle = (low + high) >>> 1;
-        if (this.positions[middle]! < from) low = middle + 1;
+        if (this.spans[middle]!.to < from) low = middle + 1;
         else high = middle;
       }
-      const position = this.positions[low];
-      return position !== undefined && position <= to ? this.markers.get(position) ?? null : null;
+      const span = this.spans[low];
+      if (!span || span.from > to || !this.path) return null;
+      let count = 1;
+      while (this.spans[low + count] && this.spans[low + count]!.from <= to) count++;
+      const doc = this.view.state.doc;
+      // A rendered/folded block has no reliable per-source-line geometry. Show its first
+      // change with an explicit block label, not a misleading rail over unrelated content.
+      const block = widget || count > 1 || doc.lineAt(from).number !== doc.lineAt(to).number;
+      const boundary = span.change.from >= doc.lines ? 'after' : from === 0 ? 'first' : 'before';
+      const path = this.path;
+      return new DiffMarker(span, span.from >= from, span.to <= to, block ? count : 0, boundary, this.view.defaultLineHeight,
+        () => host.open(path, span.line, span.change.kind === 'deleted'));
     }
 
     destroy(): void { this.destroyed = true; this.unsubscribe(); }
-  }, { decorations: (value) => value.decorations });
+  });
 
   return [plugin, gutter({
     class: 'bmd-gutter',
@@ -129,7 +149,7 @@ export function editorDiffExtension(host: EditorDiffHost): Extension {
       }
       return null;
     },
-    widgetMarker: (view, _widget, block) => view.plugin(plugin)?.markerForRange(block.from, block.to) ?? null,
+    widgetMarker: (view, _widget, block) => view.plugin(plugin)?.markerForRange(block.from, block.to, true) ?? null,
     lineMarkerChange: (update) => update.docChanged || update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshDiff))),
   })];
 }

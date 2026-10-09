@@ -9,6 +9,7 @@ export function installObsidianDom(document: Document): void {
     return element;
   };
   Object.defineProperty(win, 'createEl', { configurable: true, value: make });
+  Object.defineProperty(win, 'createDiv', { configurable: true, value: (options?: Parameters<typeof make>[1]) => make('div', options) });
   Object.defineProperty(win.Node.prototype, 'empty', { configurable: true, value: function (this: Node) { this.textContent = ''; } });
   Object.defineProperty(win.Node.prototype, 'setText', { configurable: true, value: function (this: Node, text: string) { this.textContent = text; } });
   Object.defineProperty(win.HTMLElement.prototype, 'addClass', { configurable: true, value: function (this: HTMLElement, ...classes: string[]) { this.classList.add(...classes); } });

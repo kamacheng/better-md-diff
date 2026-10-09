@@ -75,7 +75,7 @@ Evidence is written to ignored `.test-vault/stability-*/report.json`, `before.pn
 
 ## Personal compact-panel checks
 
-The personal branch now groups navigation as **↑ 1 / 2 ↓**, puts statistics beside the filename, and moves the reading guide to a `?` button opening a native Obsidian dialog. The summary has a single divider rather than a framed card. Diff lines have softer backgrounds and more line spacing; existing font-size preferences, changed-word emphasis, source copying and restoration safeguards remain intact. No changes are filtered or automatically folded. The tab, ribbon and file-menu entry share the built-in `file-diff` document-plus/minus icon.
+The personal branch now groups navigation as **↑ Change 1 / 2 ↓**, puts statistics beside the filename, and moves the reading guide to a `?` button opening a native Obsidian dialog. The summary has a single divider rather than a framed card. Diff lines have softer backgrounds and more line spacing; existing font-size preferences, changed-word emphasis, source copying and restoration safeguards remain intact. No changes are filtered or automatically folded. The tab, ribbon and file-menu entry share the built-in `file-diff` document-plus/minus icon.
 
 ```bash
 npm run check
@@ -83,13 +83,13 @@ PYTHONIOENCODING=utf-8 python scripts/host-smoke.py --executable "C:/Users/YOU/A
 PYTHONIOENCODING=utf-8 python scripts/host-smoke.py --executable "C:/Users/YOU/AppData/Local/Obsidian/Obsidian.exe" --language zh
 ```
 
-Latest local evidence: **217 automated tests**, **36 host checks per language**, **36 Chromium whitespace-layout cases**, and the long-document Live Preview stability regression passed. Reports are in `.test-vault/host-wnserqf1/` (English), `.test-vault/host-zvxtmovc/` (Chinese), `.test-vault/whitespace-3i3h8w2n/`, and `.test-vault/stability-ywhntwl2/`. These are generated fixtures, not personal notes.
+Checkpoint evidence (before the range-flag/color changes below): **217 automated tests**, **36 host checks per language**, **36 Chromium whitespace-layout cases**, and the long-document Live Preview stability regression passed. Reports are in `.test-vault/host-wnserqf1/` (English), `.test-vault/host-zvxtmovc/` (Chinese), `.test-vault/whitespace-3i3h8w2n/`, and `.test-vault/stability-ywhntwl2/`. These are generated fixtures, not personal notes.
 
 The smoke test verifies all three icon placements, keyboard order and visible focus, guide close/Escape/focus return, pane cleanup, source copying, restoration/cancel/undo, and 280/440px layouts in both default themes. The ordinary change fixture has a 117.5px header; long names retain their full path in the tooltip, and scrolling the diff leaves the header in place. The stability fixture again measured 0px source-width/left-edge changes during typing and an external update. Larger font settings, custom themes and other plugins are not covered by this layout measurement.
 
 ### Block boundaries and active navigation
 
-Each display block now has a complete 1px border, a 6px corner radius, a separate heading bar and a 20px gap from the next block. The heading identifies its context range (current lines, or HEAD lines for deletion-only content); the selected block uses the theme accent. These are reading groups, not new action scopes: seven independent changes remain seven actions even when two share one of six display blocks. Nothing is folded or filtered, and copying across headings still produces only source rows.
+Each display block now has a complete 1px border, a 6px corner radius, a separate heading bar and a 20px gap from the next block. The heading identifies its context range (current lines, or HEAD lines for deletion-only content) and contained change count, without a separate block number; the selected block uses the theme accent. These are reading groups, not new action scopes: seven independent changes remain seven actions even when two share one of six display blocks. Nothing is folded or filtered, and copying across headings still produces only source rows.
 
 Previous/next navigation centers the selected **change**, including its old/new rows when they fit. Oversized changes reveal their beginning with an 8px inset; first/last changes use natural scroll limits without added padding. Source centering follows the existing navigation preference and preserves source/Live Preview/reading mode. Disabling that preference leaves the source scroll position unchanged, and navigation retains button focus. Passive cursor following, input and refresh do not request centering.
 
@@ -113,4 +113,29 @@ PYTHONIOENCODING=utf-8 python scripts/check-whitespace-layout.py
 
 This regression requires Python Playwright with Chromium installed. It bundles the actual renderer with the existing test-only DOM shim, loads the project stylesheet, and checks real pseudo-element/inline-fragment geometry across 280/440/480px widths, 13/18px fonts, Chinese text, tabs and up to 50,000 consecutive spaces. The host smoke test additionally checks generated table padding, exact source copying and the bottom of the final block; screenshots are saved as `whitespace-end.png`.
 
-The published GIF above predates this personal layout and has not been regenerated. No real vault installation, version bump or publication was performed. The user subsequently authorized a checkpoint commit and push of the personal branch, not a main-branch merge, tag or release.
+### Range flags and diff text colors
+
+The editor now uses scheme 2: one `+n`/`~n` flag at the start of a consecutive added/modified range, with a thin gutter rail following its actual wrapped height. Counts refer to current lines; old and new totals are not added together. A red `−n` marks the deletion boundary and counts old lines. There is no full-width deletion rule or plugin tint on source text. The gutter remains 32px and flags stay within 28px; full counts remain in accessible names/tooltips if visually ellipsized.
+
+Rendered tables and native folded blocks do not expose reliable per-source-line geometry. Their flag identifies the first contained change and explicitly labels the number of independent changes in that displayed block; no misleading internal range rail is drawn. Exact ranges and all independent actions remain in the complete right-hand diff. This does not automatically fold, classify or filter anything. Empty-document deletion flags stay within the first row; keyboard focus stays visible inside the fixed gutter.
+
+The right-hand panel uses red old text and green added text, normal theme text for context, and the existing stronger local word backgrounds. Current-row navigation stays blue. Colors adapt to the host theme instead of copying the reference image's solid green background. Disabling changed-word backgrounds preserves colored text; source copying, font preferences and restore safeguards are unchanged.
+
+Range-flag/color evidence: **224 automated tests**, **41 checks per host language**, **36 whitespace-layout cases**, and **0px** source-width/left-edge changes during long-document input/external updates. The color gate composites the actual ancestor/row/word backgrounds and checks text contrast in both default themes at 280/440px, including selected rows. Minimum measured contrast was **4.81:1 light / 4.58:1 dark**. Custom themes remain unverified. The initial neutral-text run failed as expected; an intermediate red color failed the dark changed-word contrast check and was lightened before the final passing runs.
+
+Ignored local evidence:
+
+- `.test-vault/host-mxggm8rn/` — English, 41 checks; `panel-changes-{light,dark}-{280,440}.png` and `flags-{True,False}-{light,dark}.png`.
+- `.test-vault/host-wmq8ewte/` — Chinese, 41 checks, same screenshot names.
+- `.test-vault/whitespace-2_6eenob/` — 36 layout cases using the actual renderer and stylesheet.
+- `.test-vault/stability-9y6_23bc/` — final long-document input/refresh geometry; `.test-vault/stability-6kcok194/` also verifies 1000-line deletion counts with the range-flag implementation.
+
+### Change counts and group labels
+
+Navigation explicitly shows `Change 1 / 3` / `改动 1 / 3`. A group heading now reads, for example, `Current lines 109–116 · 2 changes` / `当前 109–116 行 · 2 处改动`. There is no competing block-number sequence. Counts refer to independent operations, not added/deleted line totals. Groups, context and individual navigation/restoration scopes are unchanged; pure-deletion groups still label HEAD ranges.
+
+Unit coverage checks three changes across two groups, singular/plural English, language switching, shifted cached ranges, pending selection snapshots, and regrouping when context changes without changing the action total. Final **225 automated tests** and **42 checks per host language** pass. Real-host coverage visits each of those three changes and restores only the selected nearby item. The 280/440px light/dark toolbar checks still report no overlap and a 117.5px ordinary header; no CSS/layout adjustment was needed.
+
+Evidence: `.test-vault/host-iptw2fpn/` (English) and `.test-vault/host-eldsowom/` (Chinese), including `change-counts.png`. These use generated notes in fresh profiles, not the user's screenshot content or real vault.
+
+The published GIF above predates these personal changes and has not been regenerated. The earlier personal-branch checkpoint `d3cc5a3` was initially committed/pushed without a main-branch merge or release. The user has now authorized committing/pushing the follow-up range flags, text colors and count labels, then merging/pushing the personal branch into `main`. This includes the earlier review foundations, which remain unconnected to the plugin entrypoint; it is not a completed review workflow. No real-vault installation, version bump, release tag or publication is included.

@@ -116,8 +116,8 @@ export class DiffPanel extends ItemView {
       this.updateRefreshButton();
       if (this.feedbackKey) this.feedback.setText(t(this.feedbackKey));
       this.items.forEach((item, index) => this.localizeItem(item, index));
-      this.cards.forEach((card, index) => {
-        this.localizeCard(card, index);
+      this.cards.forEach((card) => {
+        this.localizeCard(card);
         card.hunk.rows.forEach((row, i) => localizeHighlightedText(card.rows[i]!.querySelector<HTMLElement>('.bmd-row-text')!, row));
       });
       if (this.rendered && !this.cards.length) this.renderEmptyState();
@@ -226,8 +226,9 @@ export class DiffPanel extends ItemView {
   }
 
   private updateProgress(): void {
-    const label = this.items.length ? t('第 {index} / {total} 处', { index: this.selected + 1, total: this.items.length }) : t('0 处变更');
-    this.progress.setText(`${this.items.length ? this.selected + 1 : 0} / ${this.items.length}`);
+    const progress = t('改动 {index} / {total}', { index: this.items.length ? this.selected + 1 : 0, total: this.items.length });
+    const label = this.items.length ? progress : t('0 处变更');
+    this.progress.setText(progress);
     this.progress.setAttribute('aria-label', label);
     this.progress.title = label;
     this.previous.disabled = this.next.disabled = this.items.length < 2 || this.pendingRender;
@@ -333,7 +334,7 @@ export class DiffPanel extends ItemView {
     this.cards = plans.map(({ hunk, key, card }, index) => {
       card ??= this.createCard(hunk, key, highlights, state, changesByRow);
       card.hunk = hunk;
-      this.localizeCard(card, index);
+      this.localizeCard(card);
       for (const item of card.items) {
         item.change = changesByRow.get(hunk.rows[item.rowIndex]!)!;
         item.snapshot = state; item.revert.disabled = false; item.jump.disabled = false;
@@ -358,14 +359,14 @@ export class DiffPanel extends ItemView {
     if (this.followedLine !== undefined) this.showLine(this.followedLine, false);
   }
 
-  private localizeCard(card: HunkCard, index: number): void {
+  private localizeCard(card: HunkCard): void {
     const current = card.hunk.rows.filter((row) => row.newLine !== null);
     const lines = current.length ? current.map((row) => row.newLine!) : card.hunk.rows.map((row) => row.oldLine!);
     const from = lines[0]!, to = lines[lines.length - 1]!;
     const range = current.length
-      ? t(from === to ? '当前第 {from} 行' : '当前第 {from}–{to} 行', { from, to })
-      : t(from === to ? 'HEAD 第 {from} 行' : 'HEAD 第 {from}–{to} 行', { from, to });
-    const label = t('区块 {index} · {range}', { index: index + 1, range });
+      ? t(from === to ? '当前 {from} 行' : '当前 {from}–{to} 行', { from, to })
+      : t(from === to ? 'HEAD {from} 行' : 'HEAD {from}–{to} 行', { from, to });
+    const label = t(card.items.length === 1 ? '{range} · 1 处改动' : '{range} · {count} 处改动', { range, count: card.items.length });
     card.heading.setText(label);
     card.heading.title = t('{label}：定位此区块的第一项改动', { label });
     card.heading.setAttribute('aria-label', card.heading.title);
